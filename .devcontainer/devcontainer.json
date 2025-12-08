@@ -1,0 +1,28 @@
+{
+  "name": "C System Lab",
+  "image": "mcr.microsoft.com/devcontainers/base:debian",
+  
+  // Install C tools: build-essential (gcc, make), gdb (debugger), strace (syscall tracer)
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  
+  // Run these commands after the container is created to install core C tools
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y build-essential gdb strace man-pages",
+
+  // CRITICAL: This allows gdb and strace to work inside the container
+  "runArgs": [
+    "--cap-add=SYS_PTRACE",
+    "--security-opt", "seccomp=unconfined"
+  ],
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools"
+      ]
+    }
+  }
+}
