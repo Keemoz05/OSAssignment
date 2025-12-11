@@ -8,14 +8,12 @@
 // This variable controls if the timer should keep running
 // 1 = run, 0 = stop
 int game_active = 1; 
-
+int seconds = 0;
 // This is the function the Thread will run
 void* timer_thread(void* arg) {
-    int seconds = 0;
     while (game_active == 1) {
         sleep(1); // Wait 1 second
         seconds++;
-        printf("\n   [Timer] Time Elapsed: %d seconds\n", seconds);
         
         // This makes sure the prompt shows up again after the timer prints
         // (Visual cleanup only)
@@ -92,7 +90,7 @@ int main(){
         
         // Wait for the thread to see the flag and exit cleanly
         pthread_join(tid, NULL); 
-        
+        printf("\n   [Timer] Time Taken: %d seconds\n", seconds);
         printf("[Parent] Game over. Timer stopped.\n");
     }
 

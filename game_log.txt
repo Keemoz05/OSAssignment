@@ -1,0 +1,50 @@
+[Parent] Server Started. Creating players...
+[Parent] Secret number is 25.
+[Player 3] Ready. Waiting for turn.
+[Player 1] Ready. Waiting for turn.
+[Player 2] Ready. Waiting for turn.
+[Parent] Kicking off Round Robin!
+[Player 1] Guessed 12 -> Higher!
+[Player 1] Passing turn to Player 2.
+   [Server Stats] Game running for 5 seconds...
+   [Server Stats] Game running for 10 seconds...
+[Player 2] Guessed 32 -> Lower!
+[Player 2] Passing turn to Player 3.
+   [Server Stats] Game running for 15 seconds...
+[Player 3] Guessed 54 -> Lower!
+[Player 3] Passing turn to Player 1.
+   [Server Stats] Game running for 20 seconds...
+[Player 1] Guessed 30 -> Lower!
+[Player 1] Passing turn to Player 2.
+   [Server Stats] Game running for 25 seconds...
+[Player 2] Guessed 20 -> Higher!
+[Player 2] Passing turn to Player 3.
+   [Server Stats] Game running for 30 seconds...
+[Player 3] Guessed 59 -> Lower!
+[Player 3] Passing turn to Player 1.
+[Player 1] Guessed 30 -> Lower!
+[Player 1] Passing turn to Player 2.
+   [Server Stats] Game running for 35 seconds...
+   [Server Stats] Game running for 40 seconds...
+   [Server Stats] Game running for 45 seconds...
+[Player 2] Guessed 45 -> Lower!
+[Player 2] Passing turn to Player 3.
+[Player 3] Guessed 50 -> Lower!
+[Player 3] Passing turn to Player 1.
+   [Server Stats] Game running for 50 seconds...
+[Player 1] Guessed 39 -> Lower!
+[Player 1] Passing turn to Player 2.
+   [Server Stats] Game running for 55 seconds...
+[Player 2] Guessed 35 -> Lower!
+[Player 2] Passing turn to Player 3.
+[Player 3] Guessed 33 -> Lower!
+[Player 3] Passing turn to Player 1.
+   [Server Stats] Game running for 60 seconds...
+[Player 1] Guessed 27 -> Lower!
+[Player 1] Passing turn to Player 2.
+[Player 2] Guessed 20 -> Higher!
+[Player 2] Passing turn to Player 3.
+   [Server Stats] Game running for 65 seconds...
+[Player 3] Guessed 24 -> Higher!
+[Player 3] Passing turn to Player 1.
+[Player 1] WINNER! Found 25.
