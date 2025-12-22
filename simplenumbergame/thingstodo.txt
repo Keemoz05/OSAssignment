@@ -1,0 +1,46 @@
+The scheduler must skip disconnected/inactive players.
+
+Log all events to game.log: connections, moves, turn changes, game end.
+Use of make 
+
+All log messages must be:
+– Complete (no interleaving)
+– Ordered (chronologically consistent)
+– Non-blocking to gameplay
+
+Persistent Storage: The server must maintain player win statistics in a file named
+scores.txt.
+
+Loading: The server must load the scores.txt file into shared memory upon
+server startup. If the file does not exist, it should be created.
+
+• Updating: At the conclusion of every game, the winning player’s score must be
+atomically updated in the shared memory structure.
+• Saving: The server must write the updated scores from memory back to scores.txt
+upon server shutdown (using signal handling, e.g., SIGINT) and potentially after every completed game
+
+
+C. README.txt
+• How to compile (make) and run
+• Example commands
+• Game rules summary
+• Mode supported
+
+Include:
+1. Game description and rules
+2. Deployment mode (IPC or TCP)
+3. Hybrid architecture: diagram showing processes, threads, and data flow
+4. IPC mechanism and shared memory layout
+5. Synchronization strategy: how mutexes/semaphores coordinate threads and
+processes
+6. Logger design: thread structure, queue, safety
+7. RR scheduler: how the thread manages turns across processes
+8. Persistence Strategy: Describe the file format, the loading/saving mechanism for
+scores.txt, and the synchronization used to protect the in-memory score data.
+9. Multi-Game Handling: Explain how the server resets and re-initializes for the
+start of a new game.
+10. Testing evidence: gameplay screenshots + sample game.log
+11. Screenshots: screenshots of each client view, part of the logger, and persistent
+storage content.
+
+Check code with rubrics.
