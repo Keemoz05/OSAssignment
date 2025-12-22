@@ -19,6 +19,9 @@
 
   "customizations": {
     "vscode": {
+      "settings":{
+        "git.autofetch": true
+      },
       "extensions": [
         "ms-vscode.cpptools",
         "ms-vscode.cmake-tools"
