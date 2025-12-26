@@ -1,38 +1,26 @@
-CC = gcc
-CFLAGS = -Wall -pthread
+players ?= 3
+flags = -pthread
 
-N ?= 3
-#use hash to create commands
-all: server player createpipe
+#add comment with hashtag
+all: server client createpipes
 
 server: server.c
-	$(CC) $(CFLAGS) server.c -o server
+	gcc $(flags) server.c -o server 
 
-player: player.c
-	$(CC) $(CFLAGS) player.c -o player
+client: client.c
+	gcc $(flags) client.c -o client 
 
-createpipe:
-	@# The dash (-) tells Make to ignore error if pipe already exists
+createpipes:
 	-mkfifo player_pipe
 
-run: all
-	@echo "Launching Server..."
-	xterm -T "Server" -e "./server" &
-	@sleep 1
-	@echo "Launching $(N) Players..."
-	@for i in $$(seq 1 $(N)); do \
-		xterm -T "Player $$i" -e "./player" & \
-	done
-
+run:all
+	./server
 kill:
 	@echo "Killing all game processes..."
 	-pkill -f "./server"
-	-pkill -f "./player"
+	-pkill -f "./client"
+	-rm player_pipe
 	@echo "Done."
 
-clean:
-	rm -f server player player_pipe
-
 test:
-	@echo "helloworld"
-	@echo "Makefile uses TABS, Python uses SPACES. They are opposites!"
+	@echo "Hows your knee"

@@ -1,101 +1,128 @@
 #include <stdio.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <time.h>
+#define MAX_PLAYERS 5
+#define PLAYER_NAME_SIZE 20
 
-#define SERVER_PIPE "game_pipe"
+//ignore this function, sometimes stupid buffer got hal and will make 'Enter' key not work
 
-void send_to_player(int id, char *msg) {
-    char pipe_name[20];
-    sprintf(pipe_name, "player%d", id);
-    int fd = open(pipe_name, O_WRONLY);
-    // Use write with fixed size or handle length carefully
-    write(fd, msg, strlen(msg) + 1); 
-    close(fd);
-}
-
-void broadcast_all(char *msg) {
-    for (int i = 1; i <= 3; i++) {
-        send_to_player(i, msg);
+//Usage: debug_buffer(buffer,100)
+void debug_buffer(char *b, int size) {
+    printf("--- Buffer Content ---\n");
+    for (int i = 0; i < size; i++) {
+        // Print the character if it's printable (like 'A' or '9')
+        if (b[i] >= 32 && b[i] <= 126) {
+            printf("[%c] ", b[i]);
+        } 
+        // Print special names for invisible chars
+        else if (b[i] == '\0') printf("[\\0]");
+        else if (b[i] == '\n') printf("[\\n]");
+        // Print '?' for anything else (garbage)
+        else printf("[?]");
     }
+    printf("\n----------------------\n");
 }
 
-int main() {
-    int fd_server;
-    char buffer[100];
-    int player_id, guess;
-    int target_number;
-    int current_turn = 1; // Start with Player 1
+// Each player gets one of these 'structs'
+typedef struct {
+    char guesses[100][20]; // Can hold 100 words, max 20 letters each
+    int guess_count;       // Keeps track of how many guesses they made
+} PlayerHistory;
 
-    srand(time(NULL));
-    target_number = (rand() % 100) + 1;
+int main(){
+    
+    int player_amount; // for number of players 
+    char buffer[PLAYER_NAME_SIZE]; // buffer is just temporary data storage 
+    char player_names[MAX_PLAYERS][PLAYER_NAME_SIZE]; // array to store player names
+    int count = 0 ;
+    PlayerHistory *all_players_data;
+    printf("Enter number of players (max %d): ", MAX_PLAYERS);
+    scanf("%d", &player_amount);
 
-    // Create main pipe
-    mkfifo(SERVER_PIPE, 0666);
-
-    printf("--- TURN-BASED SERVER STARTED ---\n");
-    printf("Target: %d\n", target_number);
-    printf("Wait for all 3 players to launch, then press ENTER to start game...");
-    getchar(); // Manual start so you have time to open player windows
-
-    // Start the game by telling Player 1 to go
-    printf("Game Started. Signaling Player 1.\n");
-    send_to_player(1, "GO");
-
-    fd_server = open(SERVER_PIPE, O_RDONLY);
-
-    while (1) {
-        // Wait for a guess
-        int bytes = read(fd_server, buffer, sizeof(buffer));
-        
-        if (bytes > 0) {
-            sscanf(buffer, "%d %d", &player_id, &guess);
-            printf("Player %d guessed: %d\n", player_id, guess);
-
-            // Security Check: Is it actually their turn?
-            if (player_id != current_turn) {
-                printf("Ignored out of turn guess.\n");
-                continue;
-            }
-
-            if (guess == target_number) {
-                // --- WINNER LOGIC ---
-                char win_msg[100];
-                sprintf(win_msg, "*** PLAYER %d WON! (Ans: %d) NEW GAME STARTING ***", player_id, target_number);
-                
-                // 1. Alert EVERYONE
-                broadcast_all(win_msg);
-
-                // 2. Reset Game
-                target_number = (rand() % 100) + 1;
-                printf("New Game. New Target: %d\n", target_number);
-                current_turn = 1; 
-                
-                // 3. Let Player 1 start new game
-                sleep(1); // Small delay so messages don't overlap
-                send_to_player(1, "GO");
-
-            } else {
-                // --- WRONG GUESS LOGIC ---
-                char hint_msg[100];
-                if (guess < target_number) strcpy(hint_msg, "Too Low! Wait for turn...");
-                else strcpy(hint_msg, "Too High! Wait for turn...");
-                
-                // 1. Tell current player they were wrong
-                send_to_player(current_turn, hint_msg);
-
-                // 2. Pass turn to next player (1 -> 2 -> 3 -> 1)
-                current_turn++;
-                if (current_turn > 3) current_turn = 1;
-
-                // 3. Signal next player
-                printf("Signaling Player %d\n", current_turn);
-                send_to_player(current_turn, "GO");
-            }
+        // open player terminals
+    for (int i = 0; i < player_amount; i++) {
+        if (fork() == 0) {
+            char title[20];
+            sprintf(title, "Client %d", i + 1);
+            execlp("xterm", "xterm", "-T", title,
+                   "-e", "./client", NULL);
+            exit(1);
         }
     }
-    return 0;
+
+
+    // open named pipe file for reading //
+    int fd = open("player_pipe", O_RDWR);
+
+    // error handling if pipe fails to open //
+    if ( fd < 0){
+        perror("Failed to open pipe");
+        exit(1);
+    }
+    //-----------------------------------------------------------------------------------
+    //WAITING FOR PLAYERS PHASE 
+while (1) {
+    char ch;
+    int index = 0;
+
+    // Read each character until encounter "ENTER"
+    while (read(fd, &ch, 1) > 0) {
+        if (ch == '\n') {
+            buffer[index] = '\0'; // Finish the string
+            break; // Break the inner reading loop, process the name
+        } 
+        else if (index < PLAYER_NAME_SIZE - 1) {
+            buffer[index++] = ch; // Store char and increment index
+        }
+    }
+    
+    // What it does:
+
+    // if (index > 0): This ignores empty lines. If a user just hits "Enter" without typing a name, index will be 0, and we skip this logic.
+
+    // strcpy(...): Copies the name from our temporary buffer into the permanent player_names list.
+
+    // count++: We have one more player!
+
+    if (index > 0) {
+        strcpy(player_names[count], buffer);
+        count++;
+
+        printf("Player %s has joined the game\n", player_names[count-1]);
+        
+        // Check if lobby is full
+        if (count == player_amount) {
+
+            //GAME INIT HERE//
+            //==============================================================================//
+            printf("%d Players have entered the game! Starting...\n", player_amount);
+
+            //Create a dynamic list of lists(3d array) that store each player input(guesses), 
+            //if 3 players,create 3 list which will contain strings
+
+            // 1. Allocate memory: Create a list for EACH player
+            all_players_data = malloc(player_amount * sizeof(PlayerHistory));
+
+            // 2. Initialize: Set everyone's guess count to 0 to start
+            for(int i = 0; i < player_amount; i++) {
+                all_players_data[i].guess_count = 0;
+            }
+            break;
+            //==============================================================================//
+        }
+    }
 }
+
+    //---------------------------------------------------------------------------------------
+
+    while(1){
+        printf("Lets start!\n");
+
+        sleep(10);
+    }
+
+    } 
+
+ 
