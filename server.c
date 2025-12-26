@@ -45,9 +45,14 @@ int main(){
     for (int i = 0; i < player_amount; i++) {
         if (fork() == 0) {
             char title[20];
+            char player_id[5];
+
+            //sprintf converts it into string and adds one so it does not start from zero
             sprintf(title, "Client %d", i + 1);
-            execlp("xterm", "xterm", "-T", title,
-                   "-e", "./client", NULL);
+            sprintf(player_id,"%d",i+1);
+
+            //execlp only accepts strings as arguments, so pass in title and player_id to each client as arguments
+            execlp("xterm", "xterm", "-T", title,"-e", "./client",player_id, NULL);
             exit(1);
         }
     }
@@ -93,12 +98,47 @@ while (1) {
         printf("Player %s has joined the game\n", player_names[count-1]);
         
         // Check if lobby is full
-        if (count == player_amount) {
+        if (count == player_amount) {  
 
-            //GAME INIT HERE//
-            //==============================================================================//
+            //IF lobby is full, START THE GAME //
+//========================================================================================================================================================================//
+            
             printf("%d Players have entered the game! Starting...\n", player_amount);
 
+            int player_write_fds[MAX_PLAYERS];  
+
+            //open each players pipehole ;)
+            for (int i = 0; i < player_amount; i++) {
+                char pipe_name[20];
+                sprintf(pipe_name, "p%d", i + 1); 
+
+                // Open as WRONLY (Write Only) because Server only talks here
+                player_write_fds[i] = open(pipe_name, O_WRONLY);
+            }
+
+            //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+            
+            //OBJECTIVE:
+            //TELL ALL CLIENTS THAT THE GAME IS STARTING
+            //TELL P1 IT IS HIS TURN NOW
+
+            //THE BAT signal to game start for all clients
+            for (int i = 0; i < player_amount; i++) {
+                char msg[] = "GAME_START\n"; // Protocol message
+                write(player_write_fds[i], msg, strlen(msg));
+            }
+
+            //wait a bit
+            sleep(1);
+
+            char turn_msg[] = "YOUR_TURN\n";
+            write(player_write_fds[0], turn_msg, strlen(turn_msg));
+
+            break; // Break the lobby loop, which will move to the game phase
+
+            //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+
+            
             //Create a dynamic list of lists(3d array) that store each player input(guesses), 
             //if 3 players,create 3 list which will contain strings
 
@@ -109,6 +149,7 @@ while (1) {
             for(int i = 0; i < player_amount; i++) {
                 all_players_data[i].guess_count = 0;
             }
+
             break;
             //==============================================================================//
         }
@@ -118,7 +159,7 @@ while (1) {
     //---------------------------------------------------------------------------------------
 
     while(1){
-        printf("Lets start!\n");
+        printf("Game is running.\n");
 
         sleep(10);
     }

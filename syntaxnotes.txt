@@ -1,0 +1,20 @@
+read()
+
+read( source_id, destination_variable, max_amount_to_read );
+
+// Read from 'player_pipe' and store it in 'message_buffer'
+read(player_pipe, message_buffer, 100);
+
+sprintf()
+sprintf( variable_to_fill, "template_text", values_to_insert... );
+
+// Fills the 'title' variable with "Level 5"
+sprintf(title, "Level %d", 5);
+
+execlp()
+
+execlp( "program_to_find", "program_name", "option1", "option2", NULL );
+
+// Launches xterm
+NULL: The "Stop Sign" (tells the computer there are no more arguments).
+execlp("xterm", "xterm", "-e", "./game", NULL);
