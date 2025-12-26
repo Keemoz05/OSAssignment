@@ -4,6 +4,10 @@
 #include <string.h>
 #include <fcntl.h>
 
+
+//NOTE: ALWAYS END PRINTF WITH NEWLINE TO AVOID BUFFER/INPUT HALT ISSUES, THERES A REASON SOMEWHERE BUT IM TOO LAZY TO FIND IT
+#define SIGNAL_GAME_START 1
+#define SIGNAL_YOUR_TURN  2
 int main(int argc, char *argv[]) {
     // variable declarations //
     // 1. Get my ID from the arguments passed by Server
@@ -47,29 +51,49 @@ int main(int argc, char *argv[]) {
     // IMPORTANT: Client opens this as RDONLY (Read Only)
     int my_mailbox = open(my_pipe_name, O_RDONLY);
  while(1) {
-        char buffer[100];
-        int n = read(my_mailbox, buffer, 99);
+        int signal;
+        int n = read(my_mailbox, &signal, sizeof(int));
         if (n > 0) {
-            buffer[n] = '\0'; // Clean string
-            
             //instead of using strings, what are better ways to signal game start and your turn?
 
-            //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+            //======================================================================================
             //OBJECTIVE:
-            //RECEIVE THE SIGNAL FROM SERVER THAT THE GAME IS STARTING
-            //RECEIVE THE SIGNAL FROM SERVER THAT IT IS YOUR TURN NOW
-            if (strstr(buffer, "GAME_START") != NULL) {
-                printf("All players have entered. Game is starting!\n");
-            }
+            //RECEIVE THE SIGNAL FROM SERVER THAT THE GAME IS STARTING: done
+            //RECEIVE THE SIGNAL FROM SERVER THAT IT IS YOUR TURN NOW:done
+            //SEND THE GUESS TO THE SERVER
+            //SERVER THEN WILL SAVE THE GUESS INTO A STRUCT BASED ON PLAYER ID
+            //THEN SERVER WILL PROCESS THE GUESS AND SEND BACK THE RESULT TO THE CLIENT
+            //======================================================================================
 
-            // Check if "YOUR_TURN" exists ANYWHERE in the buffer
-            if (strstr(buffer, "YOUR_TURN") != NULL) {
-                printf("It's your turn! Enter guess: ");
-                
-                // Logic to send guess...
-            }
 
-            //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+            //CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
+
+            switch(signal) {
+                case SIGNAL_GAME_START:
+                    printf("\n>>> GAME STARTING! <<<\n");
+                    break;
+
+
+                case SIGNAL_YOUR_TURN:
+                    printf("\n[IT IS YOUR TURN]\n");
+                    printf("Enter your guess:\n ");
+                    
+                    // char guess_buffer[100];
+                    // fgets(guess_buffer, sizeof(guess_buffer), stdin);
+                    // guess_buffer[strcspn(guess_buffer, "\n")] = 0; // Clean newline
+
+                    // // LOGIC TO SEND GUESS:
+                    // // We write the guess back to the main server_fd.
+                    // // Note: Depending on your server logic, you might want to 
+                    // // prepend your ID, e.g., "1:Apple", so the server knows it's you.
+                    // // For now, we just send the raw guess.
+                    // write(server_fd, guess_buffer, strlen(guess_buffer));
+                    
+                    // printf("Guess sent: %s\n", guess_buffer);
+                    // printf("Waiting for other players...\n");
+                    break;
+            }
+            //END OF CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
         }
     }
 }

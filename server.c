@@ -6,6 +6,12 @@
 #define MAX_PLAYERS 5
 #define PLAYER_NAME_SIZE 20
 
+//NOTE: ALWAYS END PRINTF WITH NEWLINE TO AVOID BUFFER/INPUT HALT ISSUES, THERES A REASON SOMEWHERE BUT IM TOO LAZY TO FIND IT
+
+// Define these at the top of both Client and Server
+#define SIGNAL_GAME_START 1
+#define SIGNAL_YOUR_TURN  2
+#define SIGNAL_GAME_OVER  3
 //ignore this function, sometimes stupid buffer got hal and will make 'Enter' key not work
 
 //Usage: debug_buffer(buffer,100)
@@ -117,22 +123,22 @@ while (1) {
             }
 
             //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
-            
+
             //OBJECTIVE:
             //TELL ALL CLIENTS THAT THE GAME IS STARTING
             //TELL P1 IT IS HIS TURN NOW
 
             //THE BAT signal to game start for all clients
             for (int i = 0; i < player_amount; i++) {
-                char msg[] = "GAME_START\n"; // Protocol message
-                write(player_write_fds[i], msg, strlen(msg));
+                int message = SIGNAL_GAME_START;
+                write(player_write_fds[i], &message, sizeof(int));
             }
 
             //wait a bit
             sleep(1);
 
-            char turn_msg[] = "YOUR_TURN\n";
-            write(player_write_fds[0], turn_msg, strlen(turn_msg));
+            int message = SIGNAL_YOUR_TURN;
+            write(player_write_fds[0], &message, sizeof(int)); 
 
             break; // Break the lobby loop, which will move to the game phase
 
