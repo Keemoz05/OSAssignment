@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <time.h> //added this for logging the activities
 
 //NOTE: ALWAYS END PRINTF WITH NEWLINE TO AVOID BUFFER/INPUT HALT ISSUES, THERES A REASON SOMEWHERE BUT IM TOO LAZY TO FIND IT
 #define SIGNAL_GAME_START 1
