@@ -14,6 +14,7 @@
 int main(int argc, char *argv[]) {
     // variable declarations //
     char guess[51];
+    
 
     // 1. Get my ID from the arguments passed by Server
     if (argc < 2) {
