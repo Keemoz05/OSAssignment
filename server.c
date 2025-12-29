@@ -41,20 +41,59 @@ typedef struct {
 } PlayerHistory;
 
 int main(){
-    
+    FILE *fptr; // init a file pointer //
     int player_amount; // for number of players 
+    int game_session = 0; // to track game sessions //
     char buffer[PLAYER_NAME_SIZE]; // buffer is just temporary data storage 
     char player_names[MAX_PLAYERS][PLAYER_NAME_SIZE]; // array to store player names
     int count = 0 ;
     PlayerHistory *all_players_data;
 
 
-    
+    // read the last game session from file //
+    fptr = fopen("player.txt" , "r");
+    if (fptr != NULL){
+        char line[256];
+        int session;
+        while (fgets(line , sizeof(line) , fptr)){
+            if (sscanf(line , "========================= Game %d=============================" , &session) == 1){
+                game_session = session;
+            }
+        }
 
+        fclose(fptr);
+    }
+
+    game_session++; // increment game session for new game //
+
+
+    if(access("player.txt" , F_OK) == 0){ // check if file exists //
+        fptr = fopen("player.txt" , "a");  // open file in append mode only //
+    } else {
+        fptr = fopen("player.txt" , "w"); // create new file if not exists //
+        
+    }
+
+    if(fptr == NULL){
+    perror("player.txt");
+    exit(1);
+}
+
+    
+    fprintf(fptr , "========================= Game %d=============================\n" , game_session);
+    fflush(fptr);
+   
     do{ 
+        
         printf("Enter number of players (max %d): ", MAX_PLAYERS);
         scanf("%d", &player_amount);
+        char buffer[50];                                               // creating a buffer to write the data into //
+        sprintf(buffer , "Player amount: %d\n" , player_amount);       // writing the data into the buffer //
+        fputs(buffer , fptr );                   // writing the buffer data into the file //
+        fflush(fptr);                        // flushing the file to ensure data is written //
     }
+
+
     while (player_amount > MAX_PLAYERS || player_amount <= 0); 
     //so nobody creates 2000 client terminals for the funsies
 
