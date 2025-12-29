@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/stat.h> //mkfifo 
 #include <signal.h> 
+#include <time.h> //added this for logging the activities within the server
 
 #define MAX_PLAYERS 5
 #define PLAYER_NAME_SIZE 20
@@ -33,6 +34,18 @@ void debug_buffer(char *b, int size) {
     }
     printf("\n----------------------\n");
 }
+
+//For the activity logs----------------------------------------------
+void log_event(FILE *fptr, const char *event)
+{
+    time_t now = time(NULL);
+    char timebuf[64];
+
+    strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    fprintf(fptr, "[%s] %s\n", timebuf, event);
+    fflush(fptr);
+}
+//---------------------------------------------------------------
 
 // Each player gets one of these 'structs'
 typedef struct {
@@ -81,6 +94,7 @@ int main(){
 
     
     fprintf(fptr , "========================= Game %d=============================\n" , game_session);
+    log_event(fptr, "Game session started"); //logs the activity into a file
     fflush(fptr);
    
     do{ 
@@ -91,6 +105,12 @@ int main(){
         sprintf(buffer , "Player amount: %d\n" , player_amount);       // writing the data into the buffer //
         fputs(buffer , fptr );                   // writing the buffer data into the file //
         fflush(fptr);                        // flushing the file to ensure data is written //
+
+        //for the logging activity----------------------------------------------------
+        char logbuf_amount[100];
+        sprintf(logbuf_amount, "Player amount selected: %d", player_amount);
+        log_event(fptr, logbuf_amount);
+        //----------------------------------------------------------------------------
     }
 
 
@@ -170,6 +190,11 @@ while (1) {
         count++;
 
         printf("Player %s has joined the game\n", player_names[count-1]);
+
+        //For logging activities
+        char logbuf_join[150];
+        sprintf(logbuf_join, "Player joined: ID=%d Name=%s", count, player_names[count-1]);
+        log_event(fptr, logbuf_join);
         
         // Check if lobby is full
         if (count == player_amount) {  
@@ -178,6 +203,7 @@ while (1) {
 //========================================================================================================================================================================//
             
             printf("%d Players have entered the game! Starting...\n", player_amount);
+            log_event(fptr, "All players joined. Game starting.");//Logs this activity
 
             //allocate memory
             all_players_data = malloc(player_amount * sizeof(PlayerHistory));
@@ -257,6 +283,11 @@ while (1) {
 
         printf("Player %d guessed: %s\n", playerid, guess_buffer);
 
+        //Logs the activity....
+        char logbuf_guess[200];
+        sprintf(logbuf_guess, "Guess received from Player %d: %s", playerid, guess_buffer);
+        log_event(fptr, logbuf_guess);
+
         printf("approaching count section\n");
 
         all_players_data[playerid].guess_count =  all_players_data[playerid].guess_count + 1;
@@ -265,6 +296,8 @@ while (1) {
         close(fd);
         break;
     }
+
+    log_event(fptr, "Game ended. Printing guess statistics.");//logs the end of the game
 
     printf("\n--- Guess Tracker ---\n");
     for(int i = 0; i < player_amount; i++) {
