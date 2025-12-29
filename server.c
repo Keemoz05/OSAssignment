@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/stat.h> //mkfifo 
+#include <signal.h> 
+
 #define MAX_PLAYERS 5
 #define PLAYER_NAME_SIZE 20
 
@@ -44,26 +47,49 @@ int main(){
     char player_names[MAX_PLAYERS][PLAYER_NAME_SIZE]; // array to store player names
     int count = 0 ;
     PlayerHistory *all_players_data;
-    printf("Enter number of players (max %d): ", MAX_PLAYERS);
-    scanf("%d", &player_amount);
+
+
+    
+
+    do{ 
+        printf("Enter number of players (max %d): ", MAX_PLAYERS);
+        scanf("%d", &player_amount);
+    }
+    while (player_amount > MAX_PLAYERS || player_amount <= 0); 
+    //so nobody creates 2000 client terminals for the funsies
+
+    //create shared lobby pipe
+    mkfifo("player_pipes", 0666);
+
+    //named pipe for each player process
+    for (int i = 0; i < player_amount; i++) {
+            char pipe_name[20];
+            sprintf(pipe_name, "p%d", i + 1);  //p1,
+            mkfifo(pipe_name , 0666);
+
+               
+        }    
+    
 
         // open player terminals
     for (int i = 0; i < player_amount; i++) {
         if (fork() == 0) {
-            char title[20];
+            char title[20]; 
             char player_id[5];
 
             //sprintf converts it into string and adds one so it does not start from zero
             sprintf(title, "Client %d", i + 1);
             sprintf(player_id,"%d",i+1);
 
+            //can we not just use printf vro </3, allat to print some lines 
+
             //execlp only accepts strings as arguments, so pass in title and player_id to each client as arguments
-            execlp("xterm", "xterm", "-T", title,"-e", "./client",player_id, NULL);
+            execlp("xterm", "xterm", "-T", title,"-e", "./client",player_id, NULL); //this creates a client terminal, passing the id number
             exit(1);
         }
     }
 
-
+    
     // open named pipe file for reading //
     int fd = open("player_pipe", O_RDWR);
 
@@ -72,6 +98,7 @@ int main(){
         perror("Failed to open pipe");
         exit(1);
     }
+   
     //-----------------------------------------------------------------------------------
     //WAITING FOR PLAYERS PHASE 
 while (1) {
@@ -88,6 +115,8 @@ while (1) {
             buffer[index++] = ch; // Store char and increment index
         }
     }
+
+    
     
     // What it does:
 
@@ -110,6 +139,12 @@ while (1) {
 //========================================================================================================================================================================//
             
             printf("%d Players have entered the game! Starting...\n", player_amount);
+
+            //allocate memory
+            all_players_data = malloc(player_amount * sizeof(PlayerHistory));
+            for(int i = 0; i < player_amount; i++) {
+                all_players_data[i].guess_count = 0;
+            }
 
             int player_write_fds[MAX_PLAYERS];  
 
@@ -140,23 +175,27 @@ while (1) {
             int message = SIGNAL_YOUR_TURN;
             write(player_write_fds[0], &message, sizeof(int)); 
 
+            close(fd);
             break; // Break the lobby loop, which will move to the game phase
 
             //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
 
             
+
+            
+
+            //error checks to be implemented
+
             //Create a dynamic list of lists(3d array) that store each player input(guesses), 
             //if 3 players,create 3 list which will contain strings
 
             // 1. Allocate memory: Create a list for EACH player
-            all_players_data = malloc(player_amount * sizeof(PlayerHistory));
+           //this section is moved before the break
 
-            // 2. Initialize: Set everyone's guess count to 0 to start
-            for(int i = 0; i < player_amount; i++) {
-                all_players_data[i].guess_count = 0;
-            }
 
-            break;
+
+    
+            
             //==============================================================================//
         }
     }
@@ -165,11 +204,37 @@ while (1) {
     //---------------------------------------------------------------------------------------
 
     while(1){
-        printf("Game is running.\n");
 
-        sleep(10);
+        int fd = open("player_pipe", O_RDWR);
+        //printf("Game is running.\n");
+
+        //sleep(20);
+        int playerid;
+        char guess_buffer[50];
+
+        read(fd, &playerid, sizeof(int));
+        
+        read(fd, guess_buffer, sizeof(guess_buffer) - 1);
+
+        printf("Player %d guessed: %s\n", playerid, guess_buffer);
+
+        printf("approaching count section\n");
+
+        all_players_data[playerid].guess_count =  all_players_data[playerid].guess_count + 1;
+        
+    
+        close(fd);
+        break;
     }
 
+    printf("\n--- Guess Tracker ---\n");
+    for(int i = 0; i < player_amount; i++) {
+    printf("ID: %d | Name: %s | Total Guesses: %d\n", 
+            i + 1, 
+            player_names[i], 
+            all_players_data[i].guess_count);
+    }
+    printf("------------------\n");
     } 
 
  
