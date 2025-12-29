@@ -12,7 +12,6 @@ client: client.c
 
 createpipes:
 	-mkfifo player_pipe 2> /dev/null      
-	-mkfifo p1 p2 p3 p4 p5 2> /dev/null
 
 run:all
 	./server

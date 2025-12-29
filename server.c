@@ -81,7 +81,7 @@ int main(){
             sprintf(title, "Client %d", i + 1);
             sprintf(player_id,"%d",i+1);
 
-            //can we not just use printf vro </3, allat to print some lines 
+            //can we not just use printf vro </3, allat to print some lines | DO NOT CHANGE IT INTO PRINTF, TURN WONT START AND CLIENT TERMINAL NAME WILL CHANGE, I TRIED
 
             //execlp only accepts strings as arguments, so pass in title and player_id to each client as arguments
             execlp("xterm", "xterm", "-T", title,"-e", "./client",player_id, NULL); //this creates a client terminal, passing the id number
