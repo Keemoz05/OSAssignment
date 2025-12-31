@@ -134,14 +134,13 @@ int main(){
     for (int i = 0; i < player_amount; i++) {
         if (fork() == 0) {
             char title[20]; 
-            char player_id[5];
+            char player_id[30];
 
             //sprintf converts it into string and adds one so it does not start from zero
             sprintf(title, "Client %d", i + 1);
             sprintf(player_id,"%d",i+1);
 
             //can we not just use printf vro </3, allat to print some lines | DO NOT CHANGE IT INTO PRINTF, TURN WONT START AND CLIENT TERMINAL NAME WILL CHANGE, I TRIED
-
             //execlp only accepts strings as arguments, so pass in title and player_id to each client as arguments
             execlp("xterm", "xterm", "-T", title,"-e", "./client",player_id, NULL); //this creates a client terminal, passing the id number
             exit(1);
@@ -279,22 +278,67 @@ while (1) {
 
         read(fd, &playerid, sizeof(int));
         
-        read(fd, guess_buffer, sizeof(guess_buffer) - 1);
+        read(fd, guess_buffer, sizeof(guess_buffer) - 1); //store the guess into guess_buffer
 
         printf("Player %d guessed: %s\n", playerid, guess_buffer);
+
+        //store the guess into the player's struct 
+        strcpy(all_players_data[playerid].guesses[all_players_data[playerid].guess_count], guess_buffer); //
+        printf("Stored guess for Player %d: %s\n", playerid, all_players_data[playerid].guesses[all_players_data[playerid].guess_count]);
+
+        //==========LOGIC TO PROCESS THE GUESS==========
+
+
+
+
+
+
+
+        //=================================================
+
+
+
+
+        //processguess(playerid, guess_buffer); //
+
+
 
         //Logs the activity....
         char logbuf_guess[200];
         sprintf(logbuf_guess, "Guess received from Player %d: %s", playerid, guess_buffer);
         log_event(fptr, logbuf_guess);
 
-        printf("approaching count section\n");
+
 
         all_players_data[playerid].guess_count =  all_players_data[playerid].guess_count + 1;
         
-    
+        int next_player_id = (playerid % player_amount) + 1;
+
+        printf("Pass turn to Player %d\n", next_player_id);
+
+
+        // ==========================================================
+        // STEP 2: Construct the Pipe Name for the Next Player
+        // ==========================================================
+        char next_pipe_name[20];
+        sprintf(next_pipe_name, "p%d", next_player_id);
+
+
+        // ==========================================================
+        // STEP 3: Signal the Next Player
+        // ==========================================================
+        int next_fd = open(next_pipe_name, O_WRONLY);
+        if (next_fd < 0) {
+            perror("Failed to open next player's pipe");
+            // Don't exit here, or the server dies. Just continue.
+        } else {
+            int signal = SIGNAL_YOUR_TURN; // Value is 2
+            write(next_fd, &signal, sizeof(int));
+            close(next_fd); // vital to close this immediately
+            printf("Signal sent to %s\n", next_pipe_name);
+        }
         close(fd);
-        break;
+        //break;
     }
 
     log_event(fptr, "Game ended. Printing guess statistics.");//logs the end of the game
