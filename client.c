@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     }
 
     write(fd, player_name, strlen(player_name));
-    printf(player_name, " sent!");
+    printf("%s sent!\n", player_name);
 
     close(fd);
 
@@ -80,9 +80,11 @@ int main(int argc, char *argv[]) {
             //OBJECTIVE:
             //RECEIVE THE SIGNAL FROM SERVER THAT THE GAME IS STARTING: done
             //RECEIVE THE SIGNAL FROM SERVER THAT IT IS YOUR TURN NOW:done
-            //SEND THE GUESS TO THE SERVER
+            //SEND THE GUESS TO THE SERVER:done
             //SERVER THEN WILL SAVE THE GUESS INTO A STRUCT BASED ON PLAYER ID
             //THEN SERVER WILL PROCESS THE GUESS AND SEND BACK THE RESULT TO THE CLIENT
+            //CLIENT WILL THEN DISPLAY THE RESULT TO THE PLAYER
+            //CLIENT WILL WAIT FOR NEXT TURN SIGNAL FROM SERVER
             //======================================================================================
 
 
@@ -99,8 +101,8 @@ int main(int argc, char *argv[]) {
                     printf("Enter your guess:\n");
                     fgets(guess, sizeof(guess), stdin);
 
-                    printf(my_id,"\n");
-                    printf("opening\n");
+                    //printf(my_id,"\n");
+                    //printf("opening\n");
 
                     fd = open("player_pipe", O_WRONLY);
                       // error handling if pipe fails to open //
