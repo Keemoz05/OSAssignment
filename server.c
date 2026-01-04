@@ -105,6 +105,13 @@ int main(){
         char* word = word_bank[word_index];
         printf("Server selected word: %s\n", word); //this is just to check if server actually got a randomised word
 
+        //slice word into 5 char, take user input, 5 char compare each char
+        //for char in word 
+        //compare with each char from user input
+
+        //if true = ?
+        //if false =?
+
         printf("Enter number of players (max %d): ", MAX_PLAYERS);
         scanf("%d", &player_amount);
         char buffer[50];                                               // creating a buffer to write the data into //
