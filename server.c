@@ -6,6 +6,7 @@
 #include <sys/stat.h> //mkfifo 
 #include <signal.h> 
 #include <time.h> //added this for logging the activities within the server
+#include "wordbank.h"
 
 #define MAX_PLAYERS 5
 #define PLAYER_NAME_SIZE 20
