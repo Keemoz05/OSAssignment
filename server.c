@@ -103,7 +103,7 @@ int main(){
         srand(time(NULL));
         int word_index = rand() % word_count;
         char* word = word_bank[word_index];
-        printf("Server selected word: %s\n", word);
+        printf("Server selected word: %s\n", word); //this is just to check if server actually got a randomised word
 
         printf("Enter number of players (max %d): ", MAX_PLAYERS);
         scanf("%d", &player_amount);
