@@ -99,7 +99,12 @@ int main(){
     fflush(fptr);
    
     do{ 
-        
+        //randomly pick a word
+        srand(time(NULL));
+        int word_index = rand() % word_count;
+        char* word = word_bank[word_index];
+        printf("Server selected word: %s\n", word);
+
         printf("Enter number of players (max %d): ", MAX_PLAYERS);
         scanf("%d", &player_amount);
         char buffer[50];                                               // creating a buffer to write the data into //
