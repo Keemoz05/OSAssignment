@@ -10,6 +10,8 @@ server: server.c
 client: client.c
 	gcc $(flags) client.c -o client 
 
+
+
 createpipes:
 	-mkfifo player_pipe 2> /dev/null      
 

@@ -6,6 +6,7 @@
 #include <sys/stat.h> //mkfifo 
 #include <signal.h> 
 #include <time.h> //added this for logging the activities within the server
+#include "wordbank.h"
 
 #define MAX_PLAYERS 5
 #define PLAYER_NAME_SIZE 20
@@ -98,7 +99,19 @@ int main(){
     fflush(fptr);
    
     do{ 
-        
+        //randomly pick a word
+        srand(time(NULL));
+        int word_index = rand() % word_count;
+        char* word = word_bank[word_index];
+        printf("Server selected word: %s\n", word); //this is just to check if server actually got a randomised word
+
+        //slice word into 5 char, take user input, 5 char compare each char
+        //for char in word 
+        //compare with each char from user input
+
+        //if true = ?
+        //if false =?
+
         printf("Enter number of players (max %d): ", MAX_PLAYERS);
         scanf("%d", &player_amount);
         char buffer[50];                                               // creating a buffer to write the data into //

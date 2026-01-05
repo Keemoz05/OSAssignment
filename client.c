@@ -98,7 +98,8 @@ int main(int argc, char *argv[]) {
 
                 case SIGNAL_YOUR_TURN:
                     printf("\n[IT IS YOUR TURN]\n");
-                    printf("Enter your guess:\n");
+                    do{
+                    printf("Enter your guess: _ _ _ _ _\n");
                     fgets(guess, sizeof(guess), stdin);
 
                     //printf(my_id,"\n");
@@ -122,7 +123,8 @@ int main(int argc, char *argv[]) {
 
                     
                     close(fd);
-                
+                }
+                while(strlen(guess) > 6);
 
                     //printf(guess,"\n");
                     
