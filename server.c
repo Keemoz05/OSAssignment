@@ -39,6 +39,7 @@ void debug_buffer(char *b, int size) {
 //For the activity logs----------------------------------------------
 void log_event(FILE *fptr, const char *event)
 {
+    if (fptr == NULL) return ;
     time_t now = time(NULL);
     char timebuf[64];
 
