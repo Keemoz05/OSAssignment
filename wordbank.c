@@ -4,7 +4,7 @@
 
 
 
-static const char word_bank[word_count][word_len] = {
+ const char word_bank[word_count][word_len] = {
     "apple","grape","brick","flame","stone",
     "pride","sharp","light","cloud","dream",
     "track","plant","water","smile","chess",

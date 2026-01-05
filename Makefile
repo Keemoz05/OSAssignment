@@ -4,11 +4,14 @@ flags = -pthread
 #add comment with hashtag
 all: server client createpipes
 
-server: server.c
-	gcc $(flags) server.c -o server 
+server: server.c wordbank.c
+	gcc $(flags) server.c wordbank.c -o server  
 
 client: client.c
 	gcc $(flags) client.c -o client 
+
+
+
 
 
 

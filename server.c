@@ -100,9 +100,12 @@ int main(){
    
     do{ 
         //randomly pick a word
+         //randomly pick a word
         srand(time(NULL));
         int word_index = rand() % word_count;
-        char* word = word_bank[word_index];
+        
+        const char* word = word_bank[word_index];
+        
         printf("Server selected word: %s\n", word); //this is just to check if server actually got a randomised word
 
         //slice word into 5 char, take user input, 5 char compare each char

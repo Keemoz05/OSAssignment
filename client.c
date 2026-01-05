@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <time.h> //added this for logging the activities
-
+#include "wordbank.h"
 //NOTE: ALWAYS END PRINTF WITH NEWLINE TO AVOID BUFFER/INPUT HALT ISSUES, THERES A REASON SOMEWHERE BUT IM TOO LAZY TO FIND IT
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
@@ -104,7 +104,8 @@ int main(int argc, char *argv[]) {
 
                     //printf(my_id,"\n");
                     //printf("opening\n");
-
+                    }
+                    while(strlen(guess) > 5);
                     fd = open("player_pipe", O_WRONLY);
                       // error handling if pipe fails to open //
                     if ( fd < 0){
@@ -123,8 +124,7 @@ int main(int argc, char *argv[]) {
 
                     
                     close(fd);
-                }
-                while(strlen(guess) > 6);
+               
 
                     //printf(guess,"\n");
                     
