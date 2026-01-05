@@ -212,3 +212,67 @@ unt: 3
 [2025-12-31 19:13:11] Guess received from Player 1: wkekjwkoew
 nt: 3
 
+========================= Game 29=============================
+[2026-01-05 11:59:48] Game session started
+Player amount: 2
+[2026-01-05 11:59:50] Player amount selected: 2
+[2026-01-05 12:01:10] Player joined: ID=1 Name=icey
+[2026-01-05 12:01:13] Player joined: ID=2 Name=sigma
+[2026-01-05 12:01:13] All players joined. Game starting.
+[2026-01-05 12:01:17] Guess received from Player 1: adad
+r amount: 2
+
+========================= Game 30=============================
+[2026-01-05 07:10:46] Game session started
+Player amount: 2
+[2026-01-05 07:10:49] Player amount selected: 2
+[2026-01-05 07:10:51] Player joined: ID=1 Name=chan
+[2026-01-05 07:10:55] Player joined: ID=2 Name=aiman
+[2026-01-05 07:10:55] All players joined. Game starting.
+========================= Game 31=============================
+[2026-01-05 07:19:21] Game session started
+Player amount: 2
+[2026-01-05 07:19:23] Player amount selected: 2
+[2026-01-05 07:19:26] Player joined: ID=1 Name=oop
+[2026-01-05 07:19:30] Player joined: ID=2 Name=yeet
+[2026-01-05 07:19:30] All players joined. Game starting.
+[2026-01-05 07:19:41] Guess received from Player 1: aaaaaa
+amount: 2
+
+[2026-01-05 07:19:46] Guess received from Player 2: aaaaaaaa
+ount: 2
+
+[2026-01-05 07:19:50] Guess received from Player 2: aaaaaaaaaa
+nt: 2
+
+[2026-01-05 07:19:51] Guess received from Player 2: aaaaaaaa
+a
+nt: 2
+
+[2026-01-05 07:19:53] Guess received from Player 2: aaaaaaa
+
+a
+nt: 2
+
+[2026-01-05 07:19:55] Guess received from Player 1: aaa
+aaa
+
+a
+nt: 2
+
+[2026-01-05 07:19:56] Guess received from Player 1: aaaaaa
+
+
+a
+nt: 2
+
+========================= Game 32=============================
+[2026-01-05 07:21:38] Game session started
+Player amount: 2
+[2026-01-05 07:21:39] Player amount selected: 2
+[2026-01-05 07:21:42] Player joined: ID=1 Name=sigma
+[2026-01-05 07:21:46] Player joined: ID=2 Name=teyi
+[2026-01-05 07:21:46] All players joined. Game starting.
+[2026-01-05 07:21:53] Guess received from Player 1: sima
+r amount: 2
+
