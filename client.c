@@ -91,40 +91,35 @@ int main(int argc, char *argv[]) {
             //CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
 
             switch(signal) {
-                case SIGNAL_GAME_START:
-                    printf("\n>>> GAME STARTING! <<<\n");
-                    break;
-
-
-                case SIGNAL_YOUR_TURN:
+case SIGNAL_YOUR_TURN:
                     printf("\n[IT IS YOUR TURN]\n");
-                    do{
-                    printf("Enter your guess: _ _ _ _ _\n");
-                    fgets(guess, sizeof(guess), stdin);
+                    do {
+                        printf("Enter your guess (5 letters): "); // Added prompt text
+                        fgets(guess, sizeof(guess), stdin);
 
-                    //printf(my_id,"\n");
-                    //printf("opening\n");
-                    }
-                    while(strlen(guess) > 5);
+                        // FIX: Remove the newline character if it exists
+                        guess[strcspn(guess, "\n")] = 0; 
+
+                    // FIX: Check length. If you want exactly 5 letters, use != 5
+                    } while(strlen(guess) != 5); 
+
                     fd = open("player_pipe", O_WRONLY);
-                      // error handling if pipe fails to open //
-                    if ( fd < 0){
+                    if (fd < 0){
                         perror("Failed to open pipe");
                         exit(1);
                     }
 
-                    //send id
+                    // Send ID
                     int id_to_send = atoi(my_id);
                     write(fd, &id_to_send, sizeof(int));
 
-                    //send guess
-                    write(fd, guess, strlen(guess));
+                    // Send Guess (send fixed size or strlen+1 to include \0)
+                    // It is safer to send the exact buffer size expected by server, 
+                    // but sending strlen is okay if server handles null termination.
+                    write(fd, guess, strlen(guess) + 1); // +1 sends the null terminator too
                     
-                    printf(" sent guess: %s packet!\n", guess);
-
-                    
+                    printf("Sent guess: %s\n", guess);
                     close(fd);
-               
 
                     //printf(guess,"\n");
                     

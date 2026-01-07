@@ -5,21 +5,28 @@
 #include <string.h>
 #include <sys/stat.h> //mkfifo 
 #include <signal.h> 
+#include <ctype.h> //toupper
 #include <time.h> //added this for logging the activities within the server
 #include "wordbank.h"
 
 #define MAX_PLAYERS 5
 #define PLAYER_NAME_SIZE 20
-
+#define WORD_LENGTH 5
 //NOTE: ALWAYS END PRINTF WITH NEWLINE TO AVOID BUFFER/INPUT HALT ISSUES, THERES A REASON SOMEWHERE BUT IM TOO LAZY TO FIND IT
 
 // Define these at the top of both Client and Server
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
+
+
+
 //ignore this function, sometimes stupid buffer got hal and will make 'Enter' key not work
 
 //Usage: debug_buffer(buffer,100)
+
+const char *random_word = NULL; //rename the word to random_word and make it global
+
 void debug_buffer(char *b, int size) {
     printf("--- Buffer Content ---\n");
     for (int i = 0; i < size; i++) {
@@ -36,6 +43,59 @@ void debug_buffer(char *b, int size) {
     printf("\n----------------------\n");
 }
 
+// function to PROCESS the guess and return wordle-like results
+void evaluate_guess(char guess[],const char target[], char result[]) {
+    
+    // 1. Setup variables (Standard integers and arrays)
+    // letter_budget keeps track of how many of each letter are available in target word so that yellows and grays can be determined correctly
+    int letter_budget[26] = {0}; 
+    int i; 
+
+    // Initialize result array with 'X' (Gray)
+    // We can use a simple loop instead of memset to avoid pointer-based functions
+    for (i = 0; i < WORD_LENGTH; i++) {
+        result[i] = 'X';
+    }
+    result[WORD_LENGTH] = '\0'; // End the string
+
+    // 2. Build the Budget (Same logic, array syntax)
+    for (i = 0; i < WORD_LENGTH; i++) {
+        // Convert char to 0-25 index (A=0, B=1, etc.)
+        int target_index = toupper(target[i]) - 'A';
+        letter_budget[target_index]++;
+    }
+
+    // 3. PASS ONE: Green (Exact Matches)
+    for (i = 0; i < WORD_LENGTH; i++) {
+        char guess_char = toupper(guess[i]);
+        char target_char = toupper(target[i]);
+
+        if (guess_char == target_char) {
+            result[i] = 'G';
+            
+            int letter_index = guess_char - 'A';
+            letter_budget[letter_index]--; 
+        }
+    }
+
+    // 4. PASS TWO: Yellow (Wrong Position)
+    for (i = 0; i < WORD_LENGTH; i++) {
+        char guess_char = toupper(guess[i]);
+        int letter_index = guess_char - 'A';
+
+        // Skip if we already marked it Green
+        if (result[i] == 'G') {
+            continue;
+        }
+
+        // Check budget
+        if (letter_budget[letter_index] > 0) {
+            result[i] = 'Y';
+            letter_budget[letter_index]--;
+        }
+        // No else needed, it is already 'X' from step 1
+    }
+}
 //For the activity logs----------------------------------------------
 void log_event(FILE *fptr, const char *event)
 {
@@ -99,22 +159,16 @@ int main(){
     log_event(fptr, "Game session started"); //logs the activity into a file
     fflush(fptr);
    
+    srand(time(NULL));
     do{ 
         //randomly pick a word
-         //randomly pick a word
-        srand(time(NULL));
+        //randomly pick a word
+        
         int word_index = rand() % word_count;
         
-        const char* word = word_bank[word_index];
+        const char* random_word = word_bank[word_index];
         
-        printf("Server selected word: %s\n", word); //this is just to check if server actually got a randomised word
-
-        //slice word into 5 char, take user input, 5 char compare each char
-        //for char in word 
-        //compare with each char from user input
-
-        //if true = ?
-        //if false =?
+        printf("Server selected word: %s\n", random_word); //this is just to check if server actually got a randomised word
 
         printf("Enter number of players (max %d): ", MAX_PLAYERS);
         scanf("%d", &player_amount);
@@ -134,8 +188,8 @@ int main(){
     while (player_amount > MAX_PLAYERS || player_amount <= 0); 
     //so nobody creates 2000 client terminals for the funsies
 
-    //create shared lobby pipe
-    mkfifo("player_pipes", 0666);
+    //create shared lobby pipe -> this become player_pipe 
+    //mkfifo("player_pipes", 0666);
 
     //named pipe for each player process
     for (int i = 0; i < player_amount; i++) {
@@ -222,10 +276,10 @@ while (1) {
             log_event(fptr, "All players joined. Game starting.");//Logs this activity
 
             //allocate memory
-            all_players_data = malloc(player_amount * sizeof(PlayerHistory));
-            for(int i = 0; i < player_amount; i++) {
-                all_players_data[i].guess_count = 0;
-            }
+            // all_players_data = malloc(player_amount * sizeof(PlayerHistory));
+            // for(int i = 0; i < player_amount; i++) {
+            //     all_players_data[i].guess_count = 0;
+            // }
 
             int player_write_fds[MAX_PLAYERS];  
 
@@ -238,7 +292,7 @@ while (1) {
                 player_write_fds[i] = open(pipe_name, O_WRONLY);
             }
 
-            //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+            //=============LOBBY SETUP PHASE START ===================================//
 
             //OBJECTIVE:
             //TELL ALL CLIENTS THAT THE GAME IS STARTING
@@ -259,7 +313,7 @@ while (1) {
             close(fd);
             break; // Break the lobby loop, which will move to the game phase
 
-            //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+            //LOBBY SETUP PHASE END===================================//
 
             
 
@@ -300,13 +354,15 @@ while (1) {
         printf("Player %d guessed: %s\n", playerid, guess_buffer);
 
         //store the guess into the player's struct 
-        strcpy(all_players_data[playerid].guesses[all_players_data[playerid].guess_count], guess_buffer); //
-        printf("Stored guess for Player %d: %s\n", playerid, all_players_data[playerid].guesses[all_players_data[playerid].guess_count]);
+        //strcpy(all_players_data[playerid].guesses[all_players_data[playerid].guess_count], guess_buffer); //
+        //printf("Stored guess for Player %d: %s\n", playerid, all_players_data[playerid].guesses[all_players_data[playerid].guess_count]);
 
         //==========LOGIC TO PROCESS THE GUESS==========
 
+        char output[6];
+        evaluate_guess(guess_buffer, random_word, output);
 
-
+        printf("Result: %s\n", output);
 
 
 
@@ -327,7 +383,7 @@ while (1) {
 
 
 
-        all_players_data[playerid].guess_count =  all_players_data[playerid].guess_count + 1;
+        //all_players_data[playerid].guess_count =  all_players_data[playerid].guess_count + 1;
         
         int next_player_id = (playerid % player_amount) + 1;
 
