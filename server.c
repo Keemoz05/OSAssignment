@@ -161,7 +161,7 @@ int main(){
             //execlp only accepts strings as arguments, so pass in title and player_id to each client as arguments
             execlp("xterm", "xterm", "-T", title,"-e", "./client",player_id, NULL); //this creates a client terminal, passing the id number
             exit(1);
-        }
+        } 
     }
 
     
