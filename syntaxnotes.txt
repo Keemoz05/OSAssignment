@@ -18,3 +18,22 @@ execlp( "program_to_find", "program_name", "option1", "option2", NULL );
 // Launches xterm
 NULL: The "Stop Sign" (tells the computer there are no more arguments).
 execlp("xterm", "xterm", "-e", "./game", NULL);
+
+read()
+
+int open(const char *pathname, int flags);
+
+// Open "p1" for writing only. 
+int fd = open("p1", O_WRONLY);
+
+write()
+
+ssize_t write(int fd, const void *buf, size_t count);
+
+fd= filedescriptor(integerID of the file)
+buf = ADDRESS of the message (stupid pointer thing)
+count = size of the message 
+
+// Send the string length (9 bytes). 
+// If the client needs the \0, use strlen(msg) + 1.
+write(player_write_fds[0], msg, strlen(msg));
