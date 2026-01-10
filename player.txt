@@ -1,0 +1,50 @@
+========================= Game 12=============================
+[2026-01-08 11:13:14] Game session started
+Player amount: 3
+[2026-01-08 11:13:15] Player amount selected: 3
+[2026-01-08 11:13:22] Player joined: ID=1 Name=niga
+[2026-01-08 11:13:24] Player joined: ID=2 Name=nuga
+[2026-01-08 11:13:26] Player joined: ID=3 Name=noga
+[2026-01-08 11:13:26] All players joined. Game starting.
+========================= Game 13=============================
+[2026-01-08 11:13:59] Game session started
+Player amount: 3
+[2026-01-08 11:14:00] Player amount selected: 3
+========================= Game 14=============================
+[2026-01-08 11:14:13] Game session started
+Player amount: 3
+[2026-01-08 11:14:15] Player amount selected: 3
+[2026-01-08 11:14:17] Player joined: ID=1 Name=shit
+[2026-01-08 11:14:19] Player joined: ID=2 Name=da
+[2026-01-08 11:14:21] Player joined: ID=3 Name=pelas
+[2026-01-08 11:14:21] All players joined. Game starting.
+========================= Game 15=============================
+[2026-01-08 11:20:42] Game session started
+Player amount: 3
+[2026-01-08 11:20:43] Player amount selected: 3
+========================= Game 16=============================
+[2026-01-08 11:21:02] Game session started
+Player amount: 3
+[2026-01-08 11:21:03] Player amount selected: 3
+[2026-01-08 11:21:06] Player joined: ID=1 Name=kola
+[2026-01-08 11:21:08] Player joined: ID=2 Name=ver
+[2026-01-08 11:21:10] Player joined: ID=3 Name=d
+[2026-01-08 11:21:10] All players joined. Game starting.
+[2026-01-08 11:21:14] Guess received from Player 1: plsla
+[2026-01-08 11:21:17] Guess received from Player 2: kotee
+[2026-01-08 11:21:28] Guess received from Player 3: plonk
+[2026-01-08 11:21:35] Guess received from Player 1: GRRRR
+[2026-01-08 11:21:42] Guess received from Player 2: BACPT
+[2026-01-08 11:21:47] Guess received from Player 3: GYAAA
+========================= Game 17=============================
+[2026-01-08 11:22:06] Game session started
+Player amount: 3
+[2026-01-08 11:22:07] Player amount selected: 3
+[2026-01-08 11:22:10] Player joined: ID=1 Name=we
+[2026-01-08 11:22:11] Player joined: ID=2 Name=we
+[2026-01-08 11:22:15] Player joined: ID=3 Name=loo
+[2026-01-08 11:22:15] All players joined. Game starting.
+[2026-01-08 11:22:19] Guess received from Player 1: huixo
+[2026-01-08 11:22:22] Guess received from Player 2: huixo
+[2026-01-08 11:22:27] Guess received from Player 3: haoxi
+[2026-01-08 11:22:31] Guess received from Player 1: lonig

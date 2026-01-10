@@ -11,7 +11,7 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
-#define SIGNAL_RESULT 4
+#define SIGNAL_RESULT 4#define SIGNAL_RESULT 4
 int main(int argc, char *argv[]) {
     // variable declarations //
     char guess[51];
@@ -124,17 +124,7 @@ int main(int argc, char *argv[]) {
                     //close(fd);
 
                     break;
-                case SIGNAL_RESULT:
-                char result_string[10]; 
-                
-                // Read the actual string data immediately after the signal
-                read(my_mailbox, result_string, 6); 
-                
-                printf("\n-----------------------------\n");
-                printf("Your Guess: %s\n", result_string);
-                printf("-----------------------------\n");
-                printf("Waiting for other players to finish... ");
-                break;
+            }
             //END OF CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
         }
             }
