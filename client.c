@@ -11,7 +11,7 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
-
+#define SIGNAL_RESULT 4
 int main(int argc, char *argv[]) {
     // variable declarations //
     char guess[51];
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
             //RECEIVE THE SIGNAL FROM SERVER THAT THE GAME IS STARTING: done
             //RECEIVE THE SIGNAL FROM SERVER THAT IT IS YOUR TURN NOW:done
             //SEND THE GUESS TO THE SERVER:done
-            //SERVER THEN WILL SAVE THE GUESS INTO A STRUCT BASED ON PLAYER ID
+            //SERVER THEN WILL SAVE THE GUESS INTO A STRUCT BASED ON PLAYER ID : done
             //THEN SERVER WILL PROCESS THE GUESS AND SEND BACK THE RESULT TO THE CLIENT
             //CLIENT WILL THEN DISPLAY THE RESULT TO THE PLAYER
             //CLIENT WILL WAIT FOR NEXT TURN SIGNAL FROM SERVER
@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
             //CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
 
             switch(signal) {
-case SIGNAL_YOUR_TURN:
+                case SIGNAL_YOUR_TURN:
                     printf("\n[IT IS YOUR TURN]\n");
                     do {
                         printf("Enter your guess (5 letters): "); // Added prompt text
@@ -113,32 +113,31 @@ case SIGNAL_YOUR_TURN:
                     int id_to_send = atoi(my_id);
                     write(fd, &id_to_send, sizeof(int));
 
-                    // Send Guess (send fixed size or strlen+1 to include \0)
-                    // It is safer to send the exact buffer size expected by server, 
-                    // but sending strlen is okay if server handles null termination.
+
                     write(fd, guess, strlen(guess) + 1); // +1 sends the null terminator too
                     
                     printf("Sent guess: %s\n", guess);
-                    close(fd);
+                    //server process guess
+                    //server produces a variable called output which will be passed to client terminal
 
-                    //printf(guess,"\n");
-                    
-                    // char guess_buffer[100];
-                    // fgets(guess_buffer, sizeof(guess_buffer), stdin);
-                    // guess_buffer[strcspn(guess_buffer, "\n")] = 0; // Clean newline
 
-                    // // LOGIC TO SEND GUESS:
-                    // // We write the guess back to the main server_fd.
-                    // // Note: Depending on your server logic, you might want to 
-                    // // prepend your ID, e.g., "1:Apple", so the server knows it's you.
-                    // // For now, we just send the raw guess.
-                    // write(server_fd, guess_buffer, strlen(guess_buffer));
-                    
-                    // printf("Guess sent: %s\n", guess_buffer);
-                    // printf("Waiting for other players...\n");
+                    //close(fd);
+
                     break;
-            }
+                case SIGNAL_RESULT:
+                char result_string[10]; 
+                
+                // Read the actual string data immediately after the signal
+                read(my_mailbox, result_string, 6); 
+                
+                printf("\n-----------------------------\n");
+                printf("Your Guess: %s\n", result_string);
+                printf("-----------------------------\n");
+                printf("Waiting for other players to finish... ")
+                break;
             //END OF CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
         }
+            }
+    
     }
 }
