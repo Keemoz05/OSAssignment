@@ -18,13 +18,13 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
-
+#define SIGNAL_RESULT     4
 
 
 
 
 const char *random_word = NULL; //rename the word to random_word and make it global
-
+int player_write_fds[MAX_PLAYERS];
 //ignore this function, sometimes stupid buffer got hal and will make 'Enter' key not work
 
 //Usage: debug_buffer(buffer,100)
@@ -52,16 +52,16 @@ void evaluate_guess(char guess[],const char target[], char result[]) {
     int letter_budget[26] = {0}; 
     int i; 
 
-    // Initialize result array with 'X' (Gray)
+    // Initialize result array with all 'X' (Gray)
     // We can use a simple loop instead of memset to avoid pointer-based functions
     for (i = 0; i < WORD_LENGTH; i++) {
         result[i] = 'X';
     }
     result[WORD_LENGTH] = '\0'; // End the string
 
-    // 2. Build the Budget (Same logic, array syntax)
+    // 2. Build the Budget 
     for (i = 0; i < WORD_LENGTH; i++) {
-        // Convert char to 0-25 index (A=0, B=1, etc.)
+        // Converts char to 0-25 index (A=0, B=1, etc.)
         int target_index = toupper(target[i]) - 'A';
         letter_budget[target_index]++;
     }
@@ -94,7 +94,7 @@ void evaluate_guess(char guess[],const char target[], char result[]) {
             result[i] = 'Y';
             letter_budget[letter_index]--;
         }
-        // No else needed, it is already 'X' from step 1
+       
     }
 }
 //For the activity logs----------------------------------------------
@@ -280,7 +280,7 @@ while (1) {
                 all_players_data[i].guess_count = 0;
             }
 
-            int player_write_fds[MAX_PLAYERS]; //this holds the ineger ID for each player's pipe 
+            //int player_write_fds[MAX_PLAYERS]; //this holds the ineger ID for each player's pipe, moved to global variable
 
             //open each players pipehole ;)
             for (int i = 0; i < player_amount; i++) {
@@ -362,16 +362,22 @@ while (1) {
         }
 
          //store the guess into the player's struct 
-        strcpy(all_players_data[playerid].guesses[all_players_data[array_index].guess_count], guess_buffer); //
+        strcpy(all_players_data[array_index].guesses[all_players_data[array_index].guess_count], guess_buffer); //
         //printf("Stored guess for Player %d: %s\n", playerid, all_players_data[playerid].guesses[all_players_data[playerid].guess_count]);
 
         //==========LOGIC TO PROCESS THE GUESS==========
 
         char output[6];
         evaluate_guess(guess_buffer, random_word, output);
-
         printf("Result: %s\n", output);
+        //pass the output to the client
+        int result_sig = SIGNAL_RESULT;
 
+        // signal the client first
+        write(player_write_fds[array_index], &result_sig, sizeof(int));
+
+        //then bagi the output 
+        write(player_write_fds[array_index], output, sizeof(output));
 
 
 
