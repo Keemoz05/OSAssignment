@@ -124,20 +124,9 @@ int main(int argc, char *argv[]) {
                     //close(fd);
 
                     break;
-                case SIGNAL_RESULT:
-                char result_string[10]; 
-                
-                // Read the actual string data immediately after the signal
-                read(my_mailbox, result_string, 6); 
-                
-                printf("\n-----------------------------\n");
-                printf("Your Guess: %s\n", result_string);
-                printf("-----------------------------\n");
-                printf("Waiting for other players to finish... ")
-                break;
+            }
             //END OF CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
         }
             }
     
     }
-}
