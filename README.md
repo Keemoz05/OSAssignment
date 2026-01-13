@@ -1,4 +1,4 @@
-The files in the folders are just for references
+To run socketstyle, cd into the socketstyle folder. 
 
 Start the program by running
 
@@ -8,3 +8,4 @@ Remove pipes by running
 
 **make kill**
 
+We will be switching to sockets, but pipes will stay to remain as an alternative.
