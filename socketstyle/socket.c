@@ -86,6 +86,27 @@ void handle_client_session(int socket, int player_id);
 void print_local_ip();
 
 
+
+// make log event on each pthread
+
+void log_event(const char* tag , const char* message){
+    time_t now;
+    time(&now);
+    char * date = ctime(&now);
+    date[strlen(date) - 1] = '\0';
+    FILE *log_event = fopen("server_log.txt" , "a");
+
+    if (log_event != NULL){
+        fprintf(log_event ,"[%s] [PID:%d] [%s] %s\n" , date + 11 , getpid() , tag , message );
+        fclose(log_event);
+    }
+
+    printf("[%s] [PID:%d] [%s] %s\n" , date + 11 , getpid() , tag , message);
+    fflush(stdout);
+
+}
+
+
 // ======================================================================================
 //   SECTION 2: MAIN ENTRY POINT
 // ======================================================================================
@@ -281,8 +302,10 @@ void *scheduler_thread_func(void *arg) {
     
     // 3. GAME LOOP: Manage turns
     int current_idx = 0;
+    log_event("SCHEDULER" , "Thread started , waiting for players...");
     while (shm->game_running) {
         pthread_mutex_lock(&shm->mutex);
+        log_event("SCHEDULER" , "Mutex_locked , assigning turn...");
 
         // A. Find next active player (skip disconnected ones)
         int checked = 0;
@@ -302,6 +325,7 @@ void *scheduler_thread_func(void *arg) {
         
         printf("[Scheduler] Turn: Player %d | Word: %s\n", current_idx + 1, shm->target_word);
         pthread_cond_broadcast(&shm->cond_turn_start); // Wake up the specific player
+        log_event("SCHEDULER" , "Broadcast turn start , Waiting for signal child");
 
         // C. Wait for turn completion
         // We sleep here until the child process signals 'cond_turn_end'
@@ -310,6 +334,7 @@ void *scheduler_thread_func(void *arg) {
         }
 
         // D. Advance
+        log_event("SCHEDULER" , "Received turn completion signal");
         current_idx = (current_idx + 1) % shm->player_count;
         pthread_mutex_unlock(&shm->mutex);
     }
@@ -348,6 +373,8 @@ void handle_client_session(int socket, int player_id) {
     // MAIN SESSION LOOP
     while (1) {
         pthread_mutex_lock(&shm->mutex);
+
+        log_event("CHILD" , "Checking turn status...");
         
         // WAIT: Sleep until it is MY turn
         while ((shm->current_turn_index != player_id || shm->turn_completed == 1) && shm->game_running) {
@@ -357,6 +384,7 @@ void handle_client_session(int socket, int player_id) {
         // Check if game died while waiting
         if (!shm->game_running) { pthread_mutex_unlock(&shm->mutex); break; }
         
+        log_event("CHILD" , "it is MY turn , sending data to client...");
         pthread_mutex_unlock(&shm->mutex); 
 
         // --- MY TURN LOGIC ---

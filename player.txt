@@ -48,3 +48,49 @@ Player amount: 3
 [2026-01-08 11:22:22] Guess received from Player 2: huixo
 [2026-01-08 11:22:27] Guess received from Player 3: haoxi
 [2026-01-08 11:22:31] Guess received from Player 1: lonig
+========================= Game 18=============================
+[2026-01-11 18:49:17] Game session started
+Player amount: 3
+[2026-01-11 18:49:18] Player amount selected: 3
+[2026-01-11 18:49:26] Player joined: ID=1 Name=hello
+[2026-01-11 18:49:28] Player joined: ID=2 Name=ayam
+========================= Game 19=============================
+[2026-01-11 18:56:12] Game session started
+Player amount: 3
+[2026-01-11 18:56:14] Player amount selected: 3
+[2026-01-11 18:56:28] Player joined: ID=1 Name=hello
+[2026-01-11 18:56:30] Player joined: ID=2 Name=ayam
+========================= Game 20=============================
+[2026-01-11 18:59:09] Game session started
+Player amount: 3
+[2026-01-11 18:59:10] Player amount selected: 3
+[2026-01-11 18:59:11] Player joined: ID=1 Name=ayam
+[2026-01-11 18:59:15] Player joined: ID=2 Name=itik
+[2026-01-11 18:59:18] Player joined: ID=3 Name=ikan
+[2026-01-11 18:59:18] All players joined. Game starting.
+========================= Game 21=============================
+[2026-01-11 19:00:34] Game session started
+Player amount: 3
+[2026-01-11 19:00:36] Player amount selected: 3
+[2026-01-11 19:00:45] Player joined: ID=1 Name=itik
+[2026-01-11 19:00:47] Player joined: ID=2 Name=ayam
+========================= Game 22=============================
+[2026-01-11 19:05:24] Game session started
+Player amount: 3
+[2026-01-11 19:05:25] Player amount selected: 3
+[2026-01-11 19:05:32] Player joined: ID=1 Name=ayam
+[2026-01-11 19:05:35] Player joined: ID=2 Name=itik
+========================= Game 23=============================
+[2026-01-11 19:09:36] Game session started
+Player amount: 3
+[2026-01-11 19:09:37] Player amount selected: 3
+[2026-01-11 19:09:41] Player joined: ID=1 Name=ayam
+[2026-01-11 19:09:43] Player joined: ID=2 Name=fish
+[2026-01-11 19:09:47] Player joined: ID=3 Name=ayam
+[2026-01-11 19:09:47] All players joined. Game starting.
+========================= Game 24=============================
+[2026-01-11 19:12:57] Game session started
+Player amount: 3
+[2026-01-11 19:13:05] Player amount selected: 3
+[2026-01-11 19:13:11] Player joined: ID=1 Name=itik
+[2026-01-11 19:13:14] Player joined: ID=2 Name=ayam
