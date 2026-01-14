@@ -8,6 +8,7 @@
 #include <ctype.h> //toupper
 #include <time.h> //added this for logging the activities within the server
 #include "wordbank.h"
+#include <sys/wait.h>
 
 #define MAX_PLAYERS 5
 #define PLAYER_NAME_SIZE 20
@@ -26,6 +27,32 @@
 const char *random_word = NULL; //rename the word to random_word and make it global
 int player_write_fds[MAX_PLAYERS];
 //ignore this function, sometimes stupid buffer got hal and will make 'Enter' key not work
+
+
+pid_t client_pids[MAX_PLAYERS]; // Global array to store terminal PIDs
+int player_active[MAX_PLAYERS];
+
+
+
+// function to handle client termination 
+void handle_termination_during_setup(int sig) {
+    int status;
+    pid_t pid;
+    // Look for any child process that just died
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            if (client_pids[i] == pid) {
+                player_active[i] = 0; // Mark this player as inactive
+                // Since they haven't sent a name yet, we refer to them by ID
+                printf("\n[SYSTEM ALERT] Client %d window has closed!\n", i + 1);
+                
+                // Optional: exit(1); if you want the server to stop immediately
+                break;
+            } 
+        }
+    }
+}
+
 
 //Usage: debug_buffer(buffer,100)
 void debug_buffer(char *b, int size) {
@@ -118,12 +145,15 @@ typedef struct {
 
 int main(){
     FILE *fptr; // init a file pointer //
+    signal(SIGINT, SIG_IGN); // Ignore Ctrl+C to prevent accidental server shutdown
     int player_amount; // for number of players 
     int game_session = 0; // to track game sessions //
     char buffer[PLAYER_NAME_SIZE]; // buffer is just temporary data storage 
     char player_names[MAX_PLAYERS][PLAYER_NAME_SIZE]; // array to store player names
     int count = 0 ;
     PlayerHistory *all_players_data;
+    signal(SIGCHLD, handle_termination_during_setup); // Setup handler for client termination during setup
+
 
 
     // read the last game session from file //
@@ -202,18 +232,16 @@ int main(){
 
         // open player terminals
     for (int i = 0; i < player_amount; i++) {
-        if (fork() == 0) {
-            char title[20]; 
-            char player_id[30];
-
-            //sprintf converts it into string and adds one so it does not start from zero
-            sprintf(title, "Client %d", i + 1);
-            sprintf(player_id,"%d",i+1);
-
-            //can we not just use printf vro </3, allat to print some lines | DO NOT CHANGE IT INTO PRINTF, TURN WONT START AND CLIENT TERMINAL NAME WILL CHANGE, I TRIED
-            //execlp only accepts strings as arguments, so pass in title and player_id to each client as arguments
-            execlp("xterm", "xterm", "-T", title,"-e", "./client",player_id, NULL); //this creates a client terminal, passing the id number
-            exit(1);
+        player_active[i] = 1; // Mark this player as active
+        pid_t pid = fork();
+        if (pid == 0){
+            char title[20], player_id[30];
+        sprintf(title, "Client %d", i + 1);
+        sprintf(player_id, "%d", i + 1);
+        execlp("xterm", "xterm", "-T", title, "-e", "./client", player_id, NULL);
+        exit(1);
+        } else {
+            client_pids[i] = pid; // Store the child's PID
         }
     }
 
