@@ -8,9 +8,9 @@
  * 3. Child Processes: One per player. Handles direct communication (recv/send).
  * 4. Scheduler Thread: Runs in Main Process. Manages turn rotation and game flow.
  *
- * COMPILE: gcc server.c -o server -pthread
+ * COMPILE: gcc socket.c -o socket -pthread
  */
-
+#define _GNU_SOURCE //to include sigaction stuff
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +26,7 @@
 #include <netdb.h> 
 #include <ctype.h>
 #include <time.h>
+#include <sys/wait.h> //for waitpid
 
 // ======================================================================================
 //   SECTION 1: CONSTANTS & SHARED MEMORY DEFINITIONS
@@ -105,7 +106,26 @@ void log_event(const char* tag , const char* message){
     fflush(stdout);
 
 }
+//reaper function
+void reaper(int signal) { 
+    // -1 means wait for any child process.
+    // WNOHANG means don't block if children are still running.
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+    
+}
 
+//for when server abruptly disconnects (e.g: ctrl+c)
+void sigint_handler(int signal) {
+    shm->game_running = 0;
+    pthread_cond_broadcast(&shm->cond_turn_start);
+    pthread_cond_broadcast(&shm->cond_turn_end);
+}
+
+
+void sigalrm_handler(int signal) {
+    // Immediate termination of inactive player
+    exit(0);
+}
 
 // ======================================================================================
 //   SECTION 2: MAIN ENTRY POINT
@@ -113,7 +133,7 @@ void log_event(const char* tag , const char* message){
 
 int main() {
     srand(time(NULL)); 
-    signal(SIGPIPE, SIG_IGN); // Prevent server crash if client abruptly disconnects
+   
 
     int server_fd, mode;
     struct sockaddr_in address;
@@ -151,6 +171,19 @@ int main() {
     }
     listen(server_fd, MAX_PLAYERS);
 
+
+    //tells os to call reaper when child exits
+    struct sigaction sa;
+    sa.sa_handler = reaper;     // Point to our function
+    sigemptyset(&sa.sa_mask);   // Don't block other signals
+    sa.sa_flags = SA_RESTART;   // Restart accept() if it gets interrupted
+    sigaction(SIGCHLD, &sa, NULL);
+
+    
+    signal(SIGPIPE, SIG_IGN); // Prevent server crash if client abruptly disconnects
+    
+
+
     // 5. Handling Launch Modes
     if (mode == 1) {
         // LOCAL: Fork and exec xterms automatically
@@ -184,7 +217,7 @@ int main() {
             // --- CHILD PROCESS CODE ---
             close(server_fd); // Child doesn't need the listener
             handle_client_session(new_socket, connected_count);
-            exit(0); // Kill child when session ends
+            exit(0); // Kill child when session ends, reaper will be called
         } else {
             // --- PARENT PROCESS CODE ---
             close(new_socket); // Parent doesn't need the specific client socket
@@ -347,6 +380,15 @@ void *scheduler_thread_func(void *arg) {
 // ======================================================================================
 
 void handle_client_session(int socket, int player_id) {
+    //detects afk
+    signal(SIGALRM, sigalrm_handler);
+
+     // added struct to detect afk timeout
+    struct timeval tv;
+    tv.tv_sec = 10;      // 10 seconds inactivity timeout
+    tv.tv_usec = 0;
+    setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
     char name[20];
     // Basic handshake
     if (recv(socket, name, 20, 0) <= 0) { close(socket); return; }
@@ -393,10 +435,14 @@ void handle_client_session(int socket, int player_id) {
 
         char guess[20] = {0};
         char result[20] = {0};
-        
+
+
+
         // Wait for user input
         if (recv(socket, guess, sizeof(guess), 0) <= 0) goto disconnect;
         guess[strcspn(guess, "\n")] = 0;
+
+        
 
         // Process Guess (Requires Lock for Shared Word)
         pthread_mutex_lock(&shm->mutex);
@@ -427,9 +473,14 @@ void handle_client_session(int socket, int player_id) {
 
 disconnect:
     pthread_mutex_lock(&shm->mutex);
-    shm->players[player_id].is_active = 0;
-    shm->turn_completed = 1; // Release scheduler so it doesn't hang
-    pthread_cond_signal(&shm->cond_turn_end);
+    shm->players[player_id].is_active = 0; // Mark as offline
+    
+    // CRITICAL: If it was this player's turn, we must release the scheduler
+    if (shm->current_turn_index == player_id) {
+        shm->turn_completed = 1;
+        pthread_cond_signal(&shm->cond_turn_end);
+        printf("[System] Player %d timed out. Skipping turn and removing from game.\n", player_id + 1);
+    }
     pthread_mutex_unlock(&shm->mutex);
     close(socket);
     exit(0);

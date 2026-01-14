@@ -18,6 +18,10 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <ctype.h>
+/* >>> CHANGE START: Added headers for select() and Timeout logic <<< */
+#include <sys/time.h>
+#include <sys/select.h>
+/* >>> CHANGE END <<< */
 
 #define PORT 8080
 #define SIGNAL_GAME_START 1
@@ -81,6 +85,12 @@ int main(int argc, char const *argv[]) {
     printf("\n>>> CONNECTED TO SERVER <<<\n");
     printf("Enter your name: ");
     scanf("%19s", name);
+    
+    /* >>> CHANGE START: Flush stdin to clear newline after scanf before next loop <<< */
+    // This prevents any leftover 'enter' keys from messing up the next fgets
+    int c; while ((c = getchar()) != '\n' && c != EOF); 
+    /* >>> CHANGE END <<< */
+
     send(sock, name, strlen(name) + 1, 0);
     printf("Waiting for other players...\n");
 
@@ -103,11 +113,43 @@ int main(int argc, char const *argv[]) {
         else if (signal_received == SIGNAL_YOUR_TURN) {
             printf("\n--- IT IS YOUR TURN ---\n");
             
-            // Input Validation Loop
+            /* >>> CHANGE START: Implemented Non-blocking Input with Timeout <<< */
+            // Replaced blocking scanf loop with select() logic
+            
             while (1) {
-                printf("Enter 5-letter guess: ");
-                scanf("%19s", guess);
-                
+                printf("Enter 5-letter guess (10 seconds limit): ");
+                fflush(stdout); // Force text to appear before waiting
+
+                // 1. Setup Timeout
+                fd_set readfds;
+                struct timeval tv;
+                FD_ZERO(&readfds);
+                FD_SET(STDIN_FILENO, &readfds); // Watch Standard Input (Keyboard)
+
+                tv.tv_sec = 10; // 10 Seconds
+                tv.tv_usec = 0;
+
+                // 2. Wait for Input OR Timeout
+                int activity = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
+
+                if (activity == 0) {
+                    // timeouts afk 
+                    printf("\n\n>>> TIME LIMIT EXCEEDED! Disconnecting in 5...\n");
+                    sleep(5);
+
+
+                    close(sock);
+                    exit(0);
+                } else if (activity < 0) {
+                    perror("Select error\n");
+                    exit(1);
+                }
+
+                //Read Input (Safe reading)
+                if (fgets(guess, sizeof(guess), stdin) == NULL) break; 
+                guess[strcspn(guess, "\n")] = 0; // Remove newline
+
+                //Validation
                 if (strlen(guess) != 5) { printf(">> Error: Must be 5 letters.\n"); continue; }
                 
                 int valid = 1;
@@ -116,13 +158,18 @@ int main(int argc, char const *argv[]) {
                 
                 break; // Valid input
             }
+            /* >>> CHANGE END <<< */
             
             // 1. Send Guess
             send(sock, guess, strlen(guess) + 1, 0);
             
             // 2. Wait for Evaluation (G/Y/X string)
             memset(result, 0, sizeof(result));
-            recv(sock, result, sizeof(result), 0);
+            int r = recv(sock, result, sizeof(result), 0);
+            if (r <= 0) {
+                printf("Disconnected due to inactivity.\n");
+                break;
+            }
             printf("Feedback: %s\n", result);
             
             if (strcmp(result, "GGGGG") == 0) printf("*** YOU WON THIS ROUND! +1 Score ***\n");
