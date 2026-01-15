@@ -22,6 +22,7 @@
 #define PORT 8080
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
+#define SIGNAL_GAME_OVER  3
 
 int main(int argc, char const *argv[]) {
     int sock = 0;
@@ -92,16 +93,36 @@ int main(int argc, char const *argv[]) {
         int signal_received;
         int bytes = recv(sock, &signal_received, sizeof(int), 0);
         
-        if (bytes <= 0) { printf("\nServer disconnected.\n"); break; }
+        if (bytes <= 0) { printf("\nServer disconnected.\n"); break; }//idk how to handle this :(
+
+        if (signal_received == SIGNAL_GAME_OVER) {
+
+            char winner[20];
+            recv(sock, winner, 20, 0); // Receive the winner's name from server
+
+            printf("\n************************************\n");
+            printf("   MATCH OVER! WE HAVE A WINNER!   \n");
+            printf("************************************\n");
+            
+            printf("\nPress ENTER to close this window...");
+            getchar(); // Clear any leftover newline
+            getchar(); // Wait for actual enter key
+            break;
+        }
 
         // --- CASE 1: GAME START ---
         if (signal_received == SIGNAL_GAME_START) {
-            printf("\n>>> GAME STARTED! <<<\n");
+            printf("\n>>> GAME STARTED! First to 3 wins takes the match!<<<\n");
         } 
         
         // --- CASE 2: MY TURN ---
         else if (signal_received == SIGNAL_YOUR_TURN) {
+            int my_score;
+            recv(sock, &my_score, sizeof(int), 0); //Receive score from server
+            printf("\n===============================");
             printf("\n--- IT IS YOUR TURN ---\n");
+            printf("\n--- CURRENT SCORE: %d ---", my_score); // Display it!
+            printf("\n===============================\n");
             
             // Input Validation Loop
             while (1) {
