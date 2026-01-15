@@ -89,17 +89,26 @@ void print_local_ip();
 
 // make log event on each pthread
 
-void log_event(const char* tag , const char* message){
+void log_event(const char* tag , const char* message , const char* player_logfile){
+  
     time_t now;
     time(&now);
     char * date = ctime(&now);
     date[strlen(date) - 1] = '\0';
-    FILE *log_event = fopen("server_log.txt" , "a");
 
-    if (log_event != NULL){
-        fprintf(log_event ,"[%s] [PID:%d] [%s] %s\n" , date + 11 , getpid() , tag , message );
-        fclose(log_event);
+    const char* files[2] = {"server_log.txt" , player_logfile};
+
+    for ( int i = 0 ; i < 2 ; i++){
+        if (files == NULL) continue;
+        FILE *log_events = fopen(files[i] , "a");
+        if (log_events != NULL){
+         fprintf(log_events ,"[%s] [PID:%d] [%s] %s\n" , date + 11 , getpid() , tag , message );
+         fclose(log_events);
     }
+    
+    }
+
+
 
     printf("[%s] [PID:%d] [%s] %s\n" , date + 11 , getpid() , tag , message);
     fflush(stdout);
@@ -302,10 +311,10 @@ void *scheduler_thread_func(void *arg) {
     
     // 3. GAME LOOP: Manage turns
     int current_idx = 0;
-    log_event("SCHEDULER" , "Thread started , waiting for players...");
+    log_event("SCHEDULER" , "Thread started , waiting for players..." , NULL);
     while (shm->game_running) {
         pthread_mutex_lock(&shm->mutex);
-        log_event("SCHEDULER" , "Mutex_locked , assigning turn...");
+        log_event("SCHEDULER" , "Mutex_locked , assigning turn...", NULL);
 
         // A. Find next active player (skip disconnected ones)
         int checked = 0;
@@ -319,13 +328,13 @@ void *scheduler_thread_func(void *arg) {
             }
         }
 
-        // B. Announce Turn
+        // B. Announce Turn 
         shm->current_turn_index = current_idx;
         shm->turn_completed = 0; // Reset "Turn Done" flag
         
         printf("[Scheduler] Turn: Player %d | Word: %s\n", current_idx + 1, shm->target_word);
         pthread_cond_broadcast(&shm->cond_turn_start); // Wake up the specific player
-        log_event("SCHEDULER" , "Broadcast turn start , Waiting for signal child");
+        log_event("SCHEDULER" , "Broadcast turn start , Waiting for signal child" , NULL);
 
         // C. Wait for turn completion
         // We sleep here until the child process signals 'cond_turn_end'
@@ -334,7 +343,7 @@ void *scheduler_thread_func(void *arg) {
         }
 
         // D. Advance
-        log_event("SCHEDULER" , "Received turn completion signal");
+        log_event("SCHEDULER" , "Received turn completion signal" , NULL);
         current_idx = (current_idx + 1) % shm->player_count;
         pthread_mutex_unlock(&shm->mutex);
     }
@@ -348,9 +357,12 @@ void *scheduler_thread_func(void *arg) {
 
 void handle_client_session(int socket, int player_id) {
     char name[20];
+    char player_log[30];
     // Basic handshake
     if (recv(socket, name, 20, 0) <= 0) { close(socket); return; }
     name[strcspn(name, "\n")] = 0;
+    sprintf(player_log , "log_%s.txt" , name);
+   
 
     // Register into Shared Memory
     pthread_mutex_lock(&shm->mutex);
@@ -374,7 +386,7 @@ void handle_client_session(int socket, int player_id) {
     while (1) {
         pthread_mutex_lock(&shm->mutex);
 
-        log_event("CHILD" , "Checking turn status...");
+        log_event("CHILD" , "Checking turn status..." , player_log);
         
         // WAIT: Sleep until it is MY turn
         while ((shm->current_turn_index != player_id || shm->turn_completed == 1) && shm->game_running) {
@@ -384,7 +396,7 @@ void handle_client_session(int socket, int player_id) {
         // Check if game died while waiting
         if (!shm->game_running) { pthread_mutex_unlock(&shm->mutex); break; }
         
-        log_event("CHILD" , "it is MY turn , sending data to client...");
+        log_event("CHILD" , "it is MY turn , sending data to client..." , player_log);
         pthread_mutex_unlock(&shm->mutex); 
 
         // --- MY TURN LOGIC ---
@@ -393,6 +405,7 @@ void handle_client_session(int socket, int player_id) {
 
         char guess[20] = {0};
         char result[20] = {0};
+        char log_msg[40];
         
         // Wait for user input
         if (recv(socket, guess, sizeof(guess), 0) <= 0) goto disconnect;
@@ -406,12 +419,17 @@ void handle_client_session(int socket, int player_id) {
         // Send Feedback
         send(socket, result, strlen(result) + 1, 0);
         printf("[Player %s] Guessed: %s | Result: %s\n", name, guess, result);
+        sprintf(log_msg, "Guessed: %s | Result: %s\n", guess, result);
+        log_event("GAMEPLAY" , log_msg , player_log);
+       
 
         // Win Check
         if (strcmp(result, "GGGGG") == 0) {
             pthread_mutex_lock(&shm->mutex);
             shm->players[player_id].score++;
             printf("!!! %s WON! Score: %d !!!\n", name, shm->players[player_id].score);
+            sprintf(log_msg , "!!! %s WON! Score: %d !!!\n", name, shm->players[player_id].score);
+            log_event("GAMEPLAY" , log_msg , player_log);
             pick_new_word(); // Reset board
             pthread_mutex_unlock(&shm->mutex);
         }

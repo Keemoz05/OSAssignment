@@ -19,5 +19,15 @@ kill:
 	-pkill -f "\./client"
 	@echo "Done."
 
+
+clean-logs:
+	@echo "Removing all log files..."
+	-rm -f server_log.txt
+	-rm -f log_*.txt
+	@echo "Logs cleared."
+
+
+
+
 test:
 	@echo "Hows your knee"
