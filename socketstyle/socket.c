@@ -276,11 +276,8 @@ int main() {
 
     //--------------------------------------------------------------------//
 
-    pthread_t thread_id;
-    pthread_create(&thread_id , NULL , scheduler_thread_func , NULL);
-
+   
     
-
     // 3. Start the Referee (Scheduler) Thread
     // This thread runs in the background of the Parent Process
     pthread_t tid;
@@ -654,6 +651,8 @@ void handle_client_session(int socket, int player_id) {
             if (shm->players[player_id].score >= 3)
             {
                 printf("!!! MATCH OVER: %s is the Grand Champion !!!\n", name);
+                sprintf(log_msg , "!!! MATCH OVER: %s is the Grand Champion !!!\n", name);
+                log_event("GAMEPLAY" , log_msg , player_log);
                 //log_event("GAMEPLAY", "Match ended: Winner reached 3 points", player_log);
                 shm->game_running = 0; 
                 // We don't exit yet. The Scheduler will detect game_running = 0 
@@ -678,6 +677,7 @@ void handle_client_session(int socket, int player_id) {
         pthread_mutex_lock(&shm->mutex);
         shm->turn_completed = 1;
         pthread_cond_signal(&shm->cond_turn_end); // "I'm done, referee!"
+        log_event("CHILD" , "Signaled turn completion to scheduler" , player_log);
         pthread_mutex_unlock(&shm->mutex);
     }
 
