@@ -24,9 +24,9 @@ clean-logs:
 	@echo "Removing all log files..."
 	-rm -f server_log.txt
 	-rm -f log_*.txt
+	-rm -f game.log
+	-rm -f scores.txt
 	@echo "Logs cleared."
-
-
 
 
 test:
