@@ -36,6 +36,7 @@
 #define WORD_LENGTH 5
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
+#define SIGNAL_GAME_OVER  3
 #define MAX_LOG_MSG 128
 #define LOG_QUEUE_SIZE 100
 
@@ -77,6 +78,14 @@ typedef struct {
     LogEntry log_queue[LOG_QUEUE_SIZE]; // logging queue
     int player_count;    // Total players expected
     char target_word[6]; // The secret word
+
+    // --- ADD THIS FOR PERSISTENT SCORING ---
+    struct {
+        char name[20];
+        int wins;
+    } scoreboard[100]; 
+    int total_recorded_players;
+    // ---------------------------------------
     
     // Game State Flags
     int current_turn_index; // 0 to 3, indicates who plays now
@@ -182,6 +191,43 @@ void log_event(const char* tag , const char* message , const char* player_logfil
 
 }
 
+void load_scores_from_file() {
+    FILE *f = fopen("scores.txt", "r");
+    shm->total_recorded_players = 0;
+    if (!f) return;
+
+    while (fscanf(f, "%19s %d", shm->scoreboard[shm->total_recorded_players].name, 
+                  &shm->scoreboard[shm->total_recorded_players].wins) == 2) {
+        shm->total_recorded_players++;
+        if (shm->total_recorded_players >= 100) break;
+    }
+    fclose(f);
+}
+
+void save_scores_to_file() {
+    // Note: Mutex should be held when calling this if accessed via threads
+    FILE *f = fopen("scores.txt", "w");
+    if (!f) return;
+    for (int i = 0; i < shm->total_recorded_players; i++) {
+        fprintf(f, "%s %d\n", shm->scoreboard[i].name, shm->scoreboard[i].wins);
+    }
+    fclose(f);
+}
+
+//ensures that even if we force-close the server with Ctrl+C, the scores.txt file is finalized
+void handle_shutdown(int sig) {
+    printf("\n[System] Shutdown signal received. Saving scores...\n");
+    if (shm != NULL) {
+        pthread_mutex_lock(&shm->mutex);
+        save_scores_to_file();
+        pthread_mutex_unlock(&shm->mutex);
+        
+        // Cleanup shared memory before exiting
+        munmap(shm, sizeof(GameState));
+    }
+    printf("[System] Scores saved. Goodbye!\n");
+    exit(0);
+}
 
 // ======================================================================================
 //   SECTION 2: MAIN ENTRY POINT
@@ -190,6 +236,7 @@ void log_event(const char* tag , const char* message , const char* player_logfil
 int main() {
     srand(time(NULL)); 
     signal(SIGPIPE, SIG_IGN); // Prevent server crash if client abruptly disconnects
+    signal(SIGINT, handle_shutdown); // NEW: Catch Ctrl+C to save scores
 
     int server_fd, mode;
     struct sockaddr_in address;
@@ -197,6 +244,7 @@ int main() {
 
     // 1. Initialize Shared Memory (mmap)
     setup_shared_memory();
+    load_scores_from_file(); // Load existing wins into SHM
 
     pthread_t logger_thread_id;
     pthread_create(&logger_thread_id , NULL , logger_thread_func , NULL);
@@ -462,6 +510,15 @@ void *scheduler_thread_func(void *arg) {
         current_idx = (current_idx + 1) % shm->player_count;
         pthread_mutex_unlock(&shm->mutex);
     }
+
+    //A broadcast to signal everyone game is ending
+    pthread_mutex_lock(&shm->mutex);
+    int final_sig = SIGNAL_GAME_OVER;
+    // Notify any waiting children (they might be stuck in a cond_wait) like waking em up
+    pthread_cond_broadcast(&shm->cond_turn_start); 
+    pthread_mutex_unlock(&shm->mutex);
+
+    log_event("SCHEDULER", "Game finished. Match winner declared.", NULL);
     return NULL;
 }
 
@@ -484,6 +541,22 @@ void handle_client_session(int socket, int player_id) {
     strcpy(shm->players[player_id].name, name);
     shm->players[player_id].id = player_id;
     shm->players[player_id].is_active = 1;
+
+    // --- NEW: Add to persistent leaderboard immediately if they are new ---
+    int found = 0;
+    for (int i = 0; i < shm->total_recorded_players; i++) {
+        if (strcmp(shm->scoreboard[i].name, name) == 0) {
+            found = 1;
+            break;
+        }
+    }
+    if (!found && shm->total_recorded_players < 100) {
+        strcpy(shm->scoreboard[shm->total_recorded_players].name, name);
+        shm->scoreboard[shm->total_recorded_players].wins = 0; // Start at 0
+        shm->total_recorded_players++;
+        save_scores_to_file(); // Save the new entry
+    }
+
     pthread_mutex_unlock(&shm->mutex);
     
     // BARRIER: Wait for Game Start Signal from Scheduler
@@ -518,6 +591,10 @@ void handle_client_session(int socket, int player_id) {
         sig = SIGNAL_YOUR_TURN;
         if (send(socket, &sig, sizeof(int), MSG_NOSIGNAL) <= 0) goto disconnect;
 
+        //Send current score so client can display it
+        int current_score = shm->players[player_id].score;
+        send(socket, &current_score, sizeof(int), 0);
+
         char guess[20] = {0};
         char result[20] = {0};
         char log_msg[40];
@@ -541,12 +618,60 @@ void handle_client_session(int socket, int player_id) {
         // Win Check
         if (strcmp(result, "GGGGG") == 0) {
             pthread_mutex_lock(&shm->mutex);
+            // 1. Update session score
             shm->players[player_id].score++;
+
+            // 2. Update Persistent Scoreboard
+            int found = 0;
+            for (int i = 0; i < shm->total_recorded_players; i++)
+            {
+                if (strcmp(shm->scoreboard[i].name, name) == 0)
+                {
+                    shm->scoreboard[i].wins++;
+                    found = 1;
+                    break;
+                }
+            }
+
+            // If new player, add them to the list
+            if (!found && shm->total_recorded_players < 100)
+            {
+                strcpy(shm->scoreboard[shm->total_recorded_players].name, name);
+                shm->scoreboard[shm->total_recorded_players].wins = 1;
+                shm->total_recorded_players++;
+            }
+
+            // 3. Save to file immediately (Section 7.1 requirement)
+            save_scores_to_file(); //ensure that if two players win close together, the file is written correctly without race conditions
+
             printf("!!! %s WON! Score: %d !!!\n", name, shm->players[player_id].score);
             sprintf(log_msg , "!!! %s WON! Score: %d !!!\n", name, shm->players[player_id].score);
             log_event("GAMEPLAY" , log_msg , player_log);
             pick_new_word(); // Reset board
+            /**pthread_mutex_unlock(&shm->mutex);*/
+
+            // --- NEW: MATCH WIN CONDITION (Section 2 & 7) ---
+            if (shm->players[player_id].score >= 3)
+            {
+                printf("!!! MATCH OVER: %s is the Grand Champion !!!\n", name);
+                //log_event("GAMEPLAY", "Match ended: Winner reached 3 points", player_log);
+                shm->game_running = 0; 
+                // We don't exit yet. The Scheduler will detect game_running = 0 
+                // and stop assigning turns.
+                /**Notify this specific client immediately that they won the whole game
+                int end_sig = SIGNAL_GAME_OVER;
+                send(socket, &end_sig, sizeof(int), 0); */
+                
+                // Give the scheduler a moment to wake everyone up
+                pthread_cond_broadcast(&shm->cond_turn_start);
+            }
+            else
+            {
+                pick_new_word(); // Only reset board if no one has won the whole match yet
+            }
+        
             pthread_mutex_unlock(&shm->mutex);
+
         }
 
         // END TURN: Signal Scheduler
@@ -555,6 +680,24 @@ void handle_client_session(int socket, int player_id) {
         pthread_cond_signal(&shm->cond_turn_end); // "I'm done, referee!"
         pthread_mutex_unlock(&shm->mutex);
     }
+
+    //Sends the winner's name to everyone
+    int final_sig = SIGNAL_GAME_OVER;
+    send(socket, &final_sig, sizeof(int), 0);
+
+    // Find who actually reached 3 points to announce their name
+    char winner_name[20] = "No one";
+    pthread_mutex_lock(&shm->mutex);
+    for(int i = 0; i < shm->player_count; i++) {
+        if(shm->players[i].score >= 3) {
+            strcpy(winner_name, shm->players[i].name);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&shm->mutex);
+
+    send(socket, winner_name, 20, 0); // Send the winner's name to the client
+
     close(socket);
     return;
 
