@@ -1,16 +1,12 @@
 /*
  * ======================================================================================
  * MULTIPROCESS & MULTITHREADED WORD GUESS SERVER
+ * Refactored Version:
+ * Base: Logging & Persistent Scoring Architecture
+ * Added: Inactive Player Skipping, Timeout Logic, and 3-Strike Rule
  * ======================================================================================
- * * ARCHITECTURE SUMMARY:
- * 1. Shared Memory: Holds game state (turn, scores, word) accessible by all processes.
- * 2. Main Process: Listens for connections (accept) and forks child processes.
- * 3. Child Processes: One per player. Handles direct communication (recv/send).
- * 4. Scheduler Thread: Runs in Main Process. Manages turn rotation and game flow.
- *
- * COMPILE: gcc server.c -o server -pthread
  */
-
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +22,7 @@
 #include <netdb.h> 
 #include <ctype.h>
 #include <time.h>
+#include <sys/wait.h> 
 
 // ======================================================================================
 //   SECTION 1: CONSTANTS & SHARED MEMORY DEFINITIONS
@@ -33,13 +30,13 @@
 
 #define PORT 8080
 #define MAX_PLAYERS 4
+#define MAX_MISSED_TURNS 3 // 3 Strikes Rule
 #define WORD_LENGTH 5
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
 #define MAX_LOG_MSG 128
 #define LOG_QUEUE_SIZE 100
-
 
 // Database of words for the game
 const char word_database[][6] = {
@@ -55,92 +52,109 @@ typedef struct {
     int id;             // Internal ID (0 to 3)
     int is_active;      // 1 = Online, 0 = Offline
     char name[20];
+    pid_t pid;          // Process tracking
+    int missed_turns;   // Counts how many turns a player has missed a turn
     int score;
 } PlayerData;
-
 
 typedef struct {
     char tag[16];
     char msg[MAX_LOG_MSG];
     char file[32];
     int pid;
-
 } LogEntry;
 
-
-
-
-
 // THE SHARED MEMORY OBJECT
-// Everything in here is visible to Parent and all Children
 typedef struct {
     PlayerData players[MAX_PLAYERS];
-    LogEntry log_queue[LOG_QUEUE_SIZE]; // logging queue
-    int player_count;    // Total players expected
-    char target_word[6]; // The secret word
+    LogEntry log_queue[LOG_QUEUE_SIZE]; 
+    int player_count;    
+    char target_word[6]; 
 
-    // --- ADD THIS FOR PERSISTENT SCORING ---
+    // Persistent Scoring
     struct {
         char name[20];
         int wins;
     } scoreboard[100]; 
     int total_recorded_players;
-    // ---------------------------------------
     
     // Game State Flags
-    int current_turn_index; // 0 to 3, indicates who plays now
-    int game_running;       // 1 = Game On, 0 = Game Over
-    int game_started;       // 1 = All players connected, start allowed
-    int turn_completed;     // Handshake flag to prevent double-turns
-    int log_head;           // logging queue head
-    int log_tail;           // logging queue tail
+    int current_turn_index; 
+    int game_running;       
+    int game_started;       
+    int turn_completed;     
+    int log_head;           
+    int log_tail;           
     
-    // POSIX Synchronization Primitives (Must be process-shared)
-    pthread_mutex_t mutex;           // Main lock for reading/writing shared memory
-    pthread_cond_t cond_game_start;  // "Barrier": wait here until lobby is full
-    pthread_cond_t cond_turn_start;  // Signal: "Wake up and check if it's your turn"
-    pthread_cond_t cond_turn_end;    // Signal: "I finished my turn, Scheduler can proceed"
-    pthread_mutex_t log_mutex;   // mutex for logging 
-    pthread_cond_t log_cond;    // condition variable for logging
+    // Sync Primitives
+    pthread_mutex_t mutex;           
+    pthread_cond_t cond_game_start;  
+    pthread_cond_t cond_turn_start;  
+    pthread_cond_t cond_turn_end;    
+    pthread_mutex_t log_mutex;    
+    pthread_cond_t log_cond;    
 } GameState;
 
-// Global pointer to shared memory
 GameState *shm;
 
-// Function Prototypes
+// --- Prototypes ---
 void setup_shared_memory();
 void pick_new_word();
 void evaluate_guess(char guess[], const char target[], char result[]);
 void *scheduler_thread_func(void *arg);
 void handle_client_session(int socket, int player_id);
 void print_local_ip();
+void log_event(const char* tag , const char* message , const char* player_logfile);
 
 
 
+//Safely removes a player. 
+ 
+void client_cleanup(int player_id, char* reason){
+    pthread_mutex_lock(&shm->mutex);
+    
+    if (shm->players[player_id].is_active){
+        printf("[System] Disconnecting Player %d: %s\n", player_id + 1, reason);
+        
+        shm->players[player_id].is_active = 0;
+        shm->players[player_id].pid = 0;
 
-void *logger_thread_func(void *arg){
-    while (shm -> game_running){
-
-
-        pthread_mutex_lock(&shm -> log_mutex);
-
-
-        while (shm -> log_head == shm ->log_tail && shm ->game_running){
-            pthread_cond_wait(&shm -> log_cond , &shm -> log_mutex);
+        //release turn
+        if (shm->current_turn_index == player_id) {
+            shm->turn_completed = 1;
+            pthread_cond_broadcast(&shm->cond_turn_end);
         }
+    }
+    
+    pthread_mutex_unlock(&shm->mutex);
+    exit(0); // Terminates process -> Triggers SIGCHLD in Parent
+}
 
-        if (!shm -> game_running){
-             pthread_mutex_unlock(&shm -> log_mutex);
+// sig handler for zombo reap
+void reaper(int signal) { 
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+}
+
+// --- Logging Thread ---
+void *logger_thread_func(void *arg){
+    while (shm->game_running){
+        pthread_mutex_lock(&shm->log_mutex);
+        while (shm->log_head == shm->log_tail && shm->game_running){
+            pthread_cond_wait(&shm->log_cond , &shm->log_mutex);
+        }
+        if (!shm->game_running){
+             pthread_mutex_unlock(&shm->log_mutex);
              break;
         }
 
-        LogEntry *entry = &shm -> log_queue[shm -> log_tail];
-        shm -> log_tail = (shm -> log_tail + 1) % LOG_QUEUE_SIZE;
-        pthread_mutex_unlock(&shm -> log_mutex);
+        LogEntry *entry = &shm->log_queue[shm->log_tail];
+        shm->log_tail = (shm->log_tail + 1) % LOG_QUEUE_SIZE;
+        pthread_mutex_unlock(&shm->log_mutex);
 
         time_t now = time(NULL);
         struct tm *t = localtime(&now);
 
+        // Global Log
         FILE *f_main = fopen("game.log", "a");
         if (f_main) {
             fprintf(f_main, "[%02d:%02d:%02d] [PID:%d] [%s] %s\n", 
@@ -148,49 +162,40 @@ void *logger_thread_func(void *arg){
             fclose(f_main);
         }
 
-
-        if ( strlen(entry -> file) > 0 ){
-            FILE *f = fopen( entry -> file, "a");
-
+        // Player Specific Log
+        if (strlen(entry->file) > 0){
+            FILE *f = fopen(entry->file, "a");
             if (f){
-              fprintf(f , "[%02d:%02d:%02d] [PID:%d] [%s] %s\n" , t -> tm_hour , t -> tm_min , t -> tm_sec , entry -> pid , entry -> tag , entry -> msg);
+              fprintf(f , "[%02d:%02d:%02d] [PID:%d] [%s] %s\n" , t->tm_hour , t->tm_min , t->tm_sec , entry->pid , entry->tag , entry->msg);
               fclose(f);
             }
         }
-      
     }
-
     return NULL;
 }
 
-// make log event on each pthread
-
 void log_event(const char* tag , const char* message , const char* player_logfile){
-     pthread_mutex_lock(&shm -> log_mutex);
-
-     LogEntry *entry = &shm -> log_queue[shm -> log_head];
-     strncpy(entry -> tag , tag , 15);
-     entry -> tag[15] = '\0';
-     strncpy(entry -> msg , message , MAX_LOG_MSG - 1);
-     entry -> msg[MAX_LOG_MSG - 1] =  '\0';
+     pthread_mutex_lock(&shm->log_mutex);
+     LogEntry *entry = &shm->log_queue[shm->log_head];
+     strncpy(entry->tag , tag , 15);
+     entry->tag[15] = '\0';
+     strncpy(entry->msg , message , MAX_LOG_MSG - 1);
+     entry->msg[MAX_LOG_MSG - 1] =  '\0';
 
      if (player_logfile){
-        strncpy(entry -> file , player_logfile , 31);
-        entry -> file[31] = '\0';
-
+        strncpy(entry->file , player_logfile , 31);
+        entry->file[31] = '\0';
      } else {
-        entry -> file[0] = '\0';
+        entry->file[0] = '\0';
      }
+     entry->pid = getpid();
+     shm->log_head = (shm->log_head + 1) % LOG_QUEUE_SIZE;
 
-     entry -> pid = getpid();
-
-     shm -> log_head = (shm -> log_head + 1) % LOG_QUEUE_SIZE;
-
-    pthread_cond_signal(&shm -> log_cond);
-    pthread_mutex_unlock(&shm -> log_mutex);
-
+    pthread_cond_signal(&shm->log_cond);
+    pthread_mutex_unlock(&shm->log_mutex);
 }
 
+// --- Score Management ---
 void load_scores_from_file() {
     FILE *f = fopen("scores.txt", "r");
     shm->total_recorded_players = 0;
@@ -205,7 +210,6 @@ void load_scores_from_file() {
 }
 
 void save_scores_to_file() {
-    // Note: Mutex should be held when calling this if accessed via threads
     FILE *f = fopen("scores.txt", "w");
     if (!f) return;
     for (int i = 0; i < shm->total_recorded_players; i++) {
@@ -214,15 +218,12 @@ void save_scores_to_file() {
     fclose(f);
 }
 
-//ensures that even if we force-close the server with Ctrl+C, the scores.txt file is finalized
 void handle_shutdown(int sig) {
     printf("\n[System] Shutdown signal received. Saving scores...\n");
     if (shm != NULL) {
         pthread_mutex_lock(&shm->mutex);
         save_scores_to_file();
         pthread_mutex_unlock(&shm->mutex);
-        
-        // Cleanup shared memory before exiting
         munmap(shm, sizeof(GameState));
     }
     printf("[System] Scores saved. Goodbye!\n");
@@ -235,61 +236,50 @@ void handle_shutdown(int sig) {
 
 int main() {
     srand(time(NULL)); 
-    signal(SIGPIPE, SIG_IGN); // Prevent server crash if client abruptly disconnects
-    signal(SIGINT, handle_shutdown); // NEW: Catch Ctrl+C to save scores
+    signal(SIGPIPE, SIG_IGN); 
+    signal(SIGINT, handle_shutdown); 
+
+    struct sigaction sa;
+    sa.sa_handler = reaper; 
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGCHLD, &sa, NULL);
 
     int server_fd, mode;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
 
-    // 1. Initialize Shared Memory (mmap)
     setup_shared_memory();
-    load_scores_from_file(); // Load existing wins into SHM
+    load_scores_from_file(); 
 
     pthread_t logger_thread_id;
     pthread_create(&logger_thread_id , NULL , logger_thread_func , NULL);
 
-
-  
-
-    // 2. User Configuration
     printf("--- WORD GUESS SERVER ---\n");
     printf("1. Local Mode (Auto-launch terminals)\n");
     printf("2. Network Mode (Wait for remote connections)\n");
     printf("Select: ");
     if (scanf("%d", &mode) != 1) return 1;
 
-    // ------------ logging for server start ------------- //
-
     log_event("SYSTEM" , "Server started" , NULL);
-
-    //-----------------------------------------------------//
 
     printf("Enter number of players (Max %d): ", MAX_PLAYERS);
     if (scanf("%d", &shm->player_count) != 1) return 1;
 
-    // ------------ logging for players who joined the game ------------- //
-
     char log_msg[64];
-    sprintf( log_msg, "Configured for %d players.", shm->player_count);
+    sprintf(log_msg, "Configured for %d players.", shm->player_count);
     log_event("SYSTEM" , log_msg , NULL);
-
-    //--------------------------------------------------------------------//
-
    
-    
-    // 3. Start the Referee (Scheduler) Thread
-    // This thread runs in the background of the Parent Process
+    // Start Scheduler
     pthread_t tid;
     pthread_create(&tid, NULL, scheduler_thread_func, NULL);
 
-    // 4. Socket Boilerplate
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY; // Bind to 0.0.0.0 (All interfaces)
+    address.sin_addr.s_addr = INADDR_ANY; 
     address.sin_port = htons(PORT);
 
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
@@ -297,31 +287,27 @@ int main() {
     }
     listen(server_fd, MAX_PLAYERS);
 
-    // 5. Handling Launch Modes
+    // Launch Modes
     if (mode == 1) {
-        // LOCAL: Fork and exec xterms automatically
         printf("[System] Launching %d local client terminals...\n", shm->player_count);
         for (int i = 0; i < shm->player_count; i++) {
             if (fork() == 0) {
                 char title[20];
                 sprintf(title, "Player %d", i + 1);
-                // Pass "127.0.0.1" as an argument to client so it doesn't ask user
                 execlp("xterm", "xterm", "-T", title, "-e", "./client", "127.0.0.1", NULL);
                 exit(0);
             }
         }
     } else {
-        // NETWORK: Print IP and wait
         printf("\n[System] Network Mode Enabled.\n");
         print_local_ip();
         printf("Ask %d players to connect to the IP above.\n", shm->player_count);
     }
 
-    // 6. The Accept Loop (Multiprocessing Logic)
+    // Accept Loop
     int connected_count = 0;
     while (connected_count < shm->player_count) {
         printf("[System] Waiting for players: %d/%d connected...\n", connected_count, shm->player_count);
-        
         int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
 
         if (new_socket >= 0 ){
@@ -330,35 +316,24 @@ int main() {
             log_event("SYSTEM" , log_conn_msg , NULL);
         }
 
-
         if (new_socket < 0) continue;
 
-        // CRITICAL: Fork a new process for the connection
         if (fork() == 0) {
-            // --- CHILD PROCESS CODE ---
-            close(server_fd); // Child doesn't need the listener
+            close(server_fd); 
             handle_client_session(new_socket, connected_count);
-            exit(0); // Kill child when session ends
+            exit(0); 
         } else {
-            // --- PARENT PROCESS CODE ---
-            close(new_socket); // Parent doesn't need the specific client socket
+            close(new_socket); 
             connected_count++;
         }
     }
     
     printf("[System] All players connected. Main process waiting for Scheduler.\n");
-
-    // --------------------------- logging for game start ------------------------------- //
-
     char log_start_msg[64];
-    sprintf(log_start_msg , "All %d players connected. Game starting." , shm -> player_count);
+    sprintf(log_start_msg , "All %d players connected. Game starting." , shm->player_count);
     log_event("SYSTEM" , log_start_msg , NULL);
 
-    // ------------------------------------------------------------------- //
-
-
-
-    pthread_join(tid, NULL); // Wait for game to end
+    pthread_join(tid, NULL); 
     
     // Cleanup
     pthread_mutex_destroy(&shm->mutex);
@@ -382,20 +357,17 @@ void pick_new_word() {
 }
 
 void evaluate_guess(char guess[], const char target[], char result[]) {
-    // Standard Wordle Logic: G=Green, Y=Yellow, X=Gray
     int letter_budget[26] = {0}; 
     int i; 
 
-    // Init result
     for (i = 0; i < WORD_LENGTH; i++) result[i] = 'X';
     result[WORD_LENGTH] = '\0'; 
 
-    // Build frequency budget
     for (i = 0; i < WORD_LENGTH; i++) {
         letter_budget[toupper(target[i]) - 'A']++;
     }
 
-    // Pass 1: Green (Exact)
+    // Green Pass
     for (i = 0; i < WORD_LENGTH; i++) {
         char g = toupper(guess[i]);
         char t = toupper(target[i]);
@@ -404,7 +376,7 @@ void evaluate_guess(char guess[], const char target[], char result[]) {
             letter_budget[g - 'A']--; 
         }
     }
-    // Pass 2: Yellow (Wrong spot)
+    // Yellow Pass
     for (i = 0; i < WORD_LENGTH; i++) {
         char g = toupper(guess[i]);
         if (result[i] == 'G') continue;
@@ -415,11 +387,9 @@ void evaluate_guess(char guess[], const char target[], char result[]) {
     }
 }
 
-// Sets up mmap and Process-Shared Mutexes
 void setup_shared_memory() {
     shm = mmap(NULL, sizeof(GameState), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     
-    // Attributes to allow mutexes to work across FORK
     pthread_mutexattr_t mattr; 
     pthread_condattr_t cattr;
     pthread_mutexattr_init(&mattr); 
@@ -427,7 +397,6 @@ void setup_shared_memory() {
     pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
     pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
 
-    // Init primitives
     pthread_mutex_init(&shm->mutex, &mattr);
     pthread_cond_init(&shm->cond_game_start, &cattr);
     pthread_cond_init(&shm->cond_turn_start, &cattr);
@@ -435,7 +404,6 @@ void setup_shared_memory() {
     pthread_mutex_init(&shm->log_mutex , &mattr);
     pthread_cond_init(&shm->log_cond , &cattr);
 
-    // Defaults
     shm->current_turn_index = -1;
     shm->game_running = 1;
     shm->game_started = 0; 
@@ -443,7 +411,12 @@ void setup_shared_memory() {
     shm->log_head = 0;
     shm->log_tail = 0;
     pick_new_word();
-    for(int i=0; i<MAX_PLAYERS; i++) { shm->players[i].is_active = 0; shm->players[i].score = 0; }
+    for(int i=0; i<MAX_PLAYERS; i++) { 
+        shm->players[i].is_active = 0; 
+        shm->players[i].score = 0; 
+        shm->players[i].missed_turns = 0;
+        shm->players[i].pid = 0;
+    }
 }
 
 
@@ -452,7 +425,7 @@ void setup_shared_memory() {
 // ======================================================================================
 
 void *scheduler_thread_func(void *arg) {
-    // 1. WAIT PHASE: Pause until all players connect
+    // 1. WAIT PHASE
     while(1) {
         sleep(1); 
         int ready = 0;
@@ -463,83 +436,87 @@ void *scheduler_thread_func(void *arg) {
         if(ready == shm->player_count) break;
     }
 
-    // 2. START PHASE: Wake up all waiting child processes
+    // 2. START PHASE
     pthread_mutex_lock(&shm->mutex);
     shm->game_started = 1;
-    pthread_cond_broadcast(&shm->cond_game_start); // WAKE UP CALL
+    pthread_cond_broadcast(&shm->cond_game_start); 
     pthread_mutex_unlock(&shm->mutex);
     
-    // 3. GAME LOOP: Manage turns
     int current_idx = 0;
-    log_event("SCHEDULER" , "Thread started , waiting for players..." , NULL);
+    log_event("SCHEDULER" , "Thread started, waiting for players..." , NULL);
+
+    // 3. GAME LOOP
     while (shm->game_running) {
         pthread_mutex_lock(&shm->mutex);
-        log_event("SCHEDULER" , "Mutex_locked , assigning turn...", NULL);
-
-        // A. Find next active player (skip disconnected ones)
-        int checked = 0;
-        while (!shm->players[current_idx].is_active) {
+        
+        // --- ROBUST SKIPPING LOGIC ---
+        // Iterate to find the next *ACTIVE* player.
+        // If everyone disconnected, end game.
+        int attempts = 0;
+        while (shm->players[current_idx].is_active == 0) {
+            printf("[Scheduler] Skipping inactive Player %d\n", current_idx + 1);
             current_idx = (current_idx + 1) % shm->player_count;
-            checked++;
-            if (checked > shm->player_count) {
-                shm->game_running = 0; // No one left
+            attempts++;
+            
+            if (attempts > shm->player_count) {
+                printf("[Scheduler] All players gone. Game Over.\n");
+                shm->game_running = 0;
                 pthread_mutex_unlock(&shm->mutex);
                 return NULL;
             }
         }
 
-        // B. Announce Turn 
+        // Assign Turn
         shm->current_turn_index = current_idx;
-        shm->turn_completed = 0; // Reset "Turn Done" flag
+        shm->turn_completed = 0; 
         
         printf("[Scheduler] Turn: Player %d | Word: %s\n", current_idx + 1, shm->target_word);
-        pthread_cond_broadcast(&shm->cond_turn_start); // Wake up the specific player
-        log_event("SCHEDULER" , "Broadcast turn start , Waiting for signal child" , NULL);
+        log_event("SCHEDULER" , "Broadcast turn start" , NULL);
+        
+        pthread_cond_broadcast(&shm->cond_turn_start); // Wake up player
 
-        // C. Wait for turn completion
-        // We sleep here until the child process signals 'cond_turn_end'
+        // Wait for Turn End
         while (shm->turn_completed == 0 && shm->players[current_idx].is_active) {
             pthread_cond_wait(&shm->cond_turn_end, &shm->mutex);
         }
 
-        // D. Advance
-        log_event("SCHEDULER" , "Received turn completion signal" , NULL);
+        log_event("SCHEDULER" , "Turn completed, advancing..." , NULL);
         current_idx = (current_idx + 1) % shm->player_count;
         pthread_mutex_unlock(&shm->mutex);
     }
 
-    //A broadcast to signal everyone game is ending
+    // Game Over Broadcast
     pthread_mutex_lock(&shm->mutex);
-    int final_sig = SIGNAL_GAME_OVER;
-    // Notify any waiting children (they might be stuck in a cond_wait) like waking em up
     pthread_cond_broadcast(&shm->cond_turn_start); 
     pthread_mutex_unlock(&shm->mutex);
 
-    log_event("SCHEDULER", "Game finished. Match winner declared.", NULL);
+    log_event("SCHEDULER", "Game finished.", NULL);
     return NULL;
 }
 
 
 // ======================================================================================
-//   SECTION 5: THE CHILD PROCESS (PLAYER HANDLER)
+//   SECTION 5: THE CHILD PROCESS (PLAYER HANDLER + STRIKE LOGIC)
 // ======================================================================================
 
 void handle_client_session(int socket, int player_id) {
     char name[20];
     char player_log[30];
+    
     // Basic handshake
     if (recv(socket, name, 20, 0) <= 0) { close(socket); return; }
     name[strcspn(name, "\n")] = 0;
     sprintf(player_log , "log_%s.txt" , name);
-   
 
     // Register into Shared Memory
     pthread_mutex_lock(&shm->mutex);
     strcpy(shm->players[player_id].name, name);
     shm->players[player_id].id = player_id;
     shm->players[player_id].is_active = 1;
+    shm->players[player_id].pid = getpid(); // Store PID for tracking
+    shm->players[player_id].missed_turns = 0; // Reset strikes
 
-    // --- NEW: Add to persistent leaderboard immediately if they are new ---
+    // Leaderboard logic
     int found = 0;
     for (int i = 0; i < shm->total_recorded_players; i++) {
         if (strcmp(shm->scoreboard[i].name, name) == 0) {
@@ -549,179 +526,133 @@ void handle_client_session(int socket, int player_id) {
     }
     if (!found && shm->total_recorded_players < 100) {
         strcpy(shm->scoreboard[shm->total_recorded_players].name, name);
-        shm->scoreboard[shm->total_recorded_players].wins = 0; // Start at 0
+        shm->scoreboard[shm->total_recorded_players].wins = 0; 
         shm->total_recorded_players++;
-        save_scores_to_file(); // Save the new entry
+        save_scores_to_file(); 
     }
-
     pthread_mutex_unlock(&shm->mutex);
     
-    // BARRIER: Wait for Game Start Signal from Scheduler
+    // BARRIER: Wait for Game Start
     while (!shm->game_started) {
         pthread_mutex_lock(&shm->mutex);
         pthread_cond_wait(&shm->cond_game_start, &shm->mutex);
         pthread_mutex_unlock(&shm->mutex);
     }
 
-    // Tell client "Game is starting"
     int sig = SIGNAL_GAME_START;
     send(socket, &sig, sizeof(int), 0);
 
     // MAIN SESSION LOOP
     while (1) {
         pthread_mutex_lock(&shm->mutex);
-
-        log_event("CHILD" , "Checking turn status..." , player_log);
         
         // WAIT: Sleep until it is MY turn
         while ((shm->current_turn_index != player_id || shm->turn_completed == 1) && shm->game_running) {
             pthread_cond_wait(&shm->cond_turn_start, &shm->mutex);
         }
         
-        // Check if game died while waiting
         if (!shm->game_running) { pthread_mutex_unlock(&shm->mutex); break; }
         
-        log_event("CHILD" , "it is MY turn , sending data to client..." , player_log);
+        log_event("CHILD" , "My turn started" , player_log);
         pthread_mutex_unlock(&shm->mutex); 
 
         // --- MY TURN LOGIC ---
         sig = SIGNAL_YOUR_TURN;
-        if (send(socket, &sig, sizeof(int), MSG_NOSIGNAL) <= 0) goto disconnect;
+        if (send(socket, &sig, sizeof(int), MSG_NOSIGNAL) <= 0) client_cleanup(player_id, "Pipe Broken");
 
-        //Send current score so client can display it
+        // Send current score
         int current_score = shm->players[player_id].score;
         send(socket, &current_score, sizeof(int), 0);
 
-        char guess[20] = {0};
-        char result[20] = {0};
-        char log_msg[40];
+        char input_buf[20] = {0};
         
-        // Wait for user input
-        if (recv(socket, guess, sizeof(guess), 0) <= 0) goto disconnect;
-        guess[strcspn(guess, "\n")] = 0;
+        // Wait for input (BLOCKING RECV)
+        // Checks for Client Disconnect (recv <= 0)
+        int bytes = recv(socket, input_buf, sizeof(input_buf), 0);
+        if (bytes <= 0) client_cleanup(player_id, "Connection Lost");
+        input_buf[strcspn(input_buf, "\n")] = 0;
 
-        // Process Guess (Requires Lock for Shared Word)
+        //timeout
         pthread_mutex_lock(&shm->mutex);
-        evaluate_guess(guess, shm->target_word, result);
-        pthread_mutex_unlock(&shm->mutex);
 
-        // Send Feedback
-        send(socket, result, strlen(result) + 1, 0);
-        printf("[Player %s] Guessed: %s | Result: %s\n", name, guess, result);
-        sprintf(log_msg, "Guessed: %s | Result: %s\n", guess, result);
-        log_event("GAMEPLAY" , log_msg , player_log);
-       
+        // timeout flag
+        if (strcmp(input_buf, "__TIMEOUT__") == 0) {
+            shm->players[player_id].missed_turns++;
+            int strikes = shm->players[player_id].missed_turns;
 
+            printf("[Player %d] Timed Out (Strike %d/%d)\n", player_id+1, strikes, MAX_MISSED_TURNS);
+            
+            char log_msg[64];
+            sprintf(log_msg, "Timed Out (Strike %d/%d)", strikes, MAX_MISSED_TURNS);
+            log_event("TIMEOUT", log_msg, player_log);
+
+            if (strikes >= MAX_MISSED_TURNS) {
+                // 3 Strikes -> OUT
+                pthread_mutex_unlock(&shm->mutex);
+                // Note: client_cleanup handles notifying scheduler/Turn End
+                client_cleanup(player_id, "Kicked: 3 Missed Turns");
+            } else {
+                // Just Skip this turn
+                char msg[] = "Turn Skipped (Timeout)";
+                send(socket, msg, strlen(msg)+1, 0);
+                
+                // Important: Signal turn end so Scheduler moves on
+                shm->turn_completed = 1;
+                pthread_cond_signal(&shm->cond_turn_end);
+                pthread_mutex_unlock(&shm->mutex);
+                continue; // Restart loop to wait for next turn
+            }
+        } 
+        
+        // CASE B: Valid Input (Reset Strikes)
+        shm->players[player_id].missed_turns = 0;
+
+        char result[20] = {0};
+        evaluate_guess(input_buf, shm->target_word, result);
+        
         // Win Check
         if (strcmp(result, "GGGGG") == 0) {
-            pthread_mutex_lock(&shm->mutex);
-            // 1. Update session score
             shm->players[player_id].score++;
-
-            // 2. Update Persistent Scoreboard
-            int found = 0;
-            for (int i = 0; i < shm->total_recorded_players; i++)
-            {
-                if (strcmp(shm->scoreboard[i].name, name) == 0)
-                {
+            
+            // Update Persistent Scoreboard
+            for (int i = 0; i < shm->total_recorded_players; i++) {
+                if (strcmp(shm->scoreboard[i].name, name) == 0) {
                     shm->scoreboard[i].wins++;
-                    found = 1;
                     break;
                 }
             }
+            save_scores_to_file();
+            
+            char win_msg[50];
+            sprintf(win_msg , "!!! %s WON! Score: %d !!!", name, shm->players[player_id].score);
+            log_event("WIN", win_msg, player_log);
+            printf("%s\n", win_msg);
 
-            // If new player, add them to the list
-            if (!found && shm->total_recorded_players < 100)
-            {
-                strcpy(shm->scoreboard[shm->total_recorded_players].name, name);
-                shm->scoreboard[shm->total_recorded_players].wins = 1;
-                shm->total_recorded_players++;
-            }
-
-            // 3. Save to file immediately (Section 7.1 requirement)
-            save_scores_to_file(); //ensure that if two players win close together, the file is written correctly without race conditions
-
-            printf("!!! %s WON! Score: %d !!!\n", name, shm->players[player_id].score);
-            sprintf(log_msg , "!!! %s WON! Score: %d !!!\n", name, shm->players[player_id].score);
-            log_event("GAMEPLAY" , log_msg , player_log);
-            pick_new_word(); // Reset board
-            /**pthread_mutex_unlock(&shm->mutex);*/
-
-            // --- NEW: MATCH WIN CONDITION (Section 2 & 7) ---
-            if (shm->players[player_id].score >= 3)
-            {
-                printf("!!! MATCH OVER: %s is the Grand Champion !!!\n", name);
-                sprintf(log_msg , "!!! MATCH OVER: %s is the Grand Champion !!!\n", name);
-                log_event("GAMEPLAY" , log_msg , player_log);
-                //log_event("GAMEPLAY", "Match ended: Winner reached 3 points", player_log);
-                shm->game_running = 0; 
-                // We don't exit yet. The Scheduler will detect game_running = 0 
-                // and stop assigning turns.
-                /**Notify this specific client immediately that they won the whole game
-                int end_sig = SIGNAL_GAME_OVER;
-                send(socket, &end_sig, sizeof(int), 0); */
-                
-                // Give the scheduler a moment to wake everyone up
-                pthread_cond_broadcast(&shm->cond_turn_start);
-            }
-            else
-            {
-                pick_new_word(); // Only reset board if no one has won the whole match yet
-            }
-        
-            pthread_mutex_unlock(&shm->mutex);
-
+            pick_new_word(); // Reset word for next round
         }
 
-        // END TURN: Signal Scheduler
-        pthread_mutex_lock(&shm->mutex);
+        // Finish Turn
         shm->turn_completed = 1;
-        pthread_cond_signal(&shm->cond_turn_end); // "I'm done, referee!"
-        log_event("CHILD" , "Signaled turn completion to scheduler" , player_log);
+        pthread_cond_signal(&shm->cond_turn_end);
         pthread_mutex_unlock(&shm->mutex);
+
+        // Send Feedback to Client
+        send(socket, result, strlen(result) + 1, 0);
+        printf("[Player %s] Guessed: %s | Result: %s\n", name, input_buf, result);
+        
+        char log_game[64];
+        sprintf(log_game, "Guessed: %s | Result: %s", input_buf, result);
+        log_event("GAMEPLAY" , log_game , player_log);
     }
-
-    //Sends the winner's name to everyone
-    int final_sig = SIGNAL_GAME_OVER;
-    send(socket, &final_sig, sizeof(int), 0);
-
-    // Find who actually reached 3 points to announce their name
-    char winner_name[20] = "No one";
-    pthread_mutex_lock(&shm->mutex);
-    for(int i = 0; i < shm->player_count; i++) {
-        if(shm->players[i].score >= 3) {
-            strcpy(winner_name, shm->players[i].name);
-            break;
-        }
-    }
-    pthread_mutex_unlock(&shm->mutex);
-
-    send(socket, winner_name, 20, 0); // Send the winner's name to the client
-
-    close(socket);
-    return;
-
-disconnect:
-    pthread_mutex_lock(&shm->mutex);
-    shm->players[player_id].is_active = 0;
-    shm->turn_completed = 1; // Release scheduler so it doesn't hang
-    pthread_cond_signal(&shm->cond_turn_end);
-    pthread_mutex_unlock(&shm->mutex);
-    close(socket);
-    exit(0);
+    client_cleanup(player_id, "Game End");
 }
 
-// Utility to help user find their IP
 void print_local_ip() {
-    char host[256];
+    char hostbuffer[256];
     struct hostent *host_entry;
-    gethostname(host, sizeof(host));
-    host_entry = gethostbyname(host);
+    gethostname(hostbuffer, sizeof(hostbuffer));
+    host_entry = gethostbyname(hostbuffer);
     if (host_entry) {
-        printf("Possible IP(s): ");
-        for (int i = 0; host_entry->h_addr_list[i]; i++) {
-             printf("%s ", inet_ntoa(*(struct in_addr*)host_entry->h_addr_list[i]));
-        }
-        printf("\n");
+        printf("Server IP: %s\n", inet_ntoa(*((struct in_addr*)host_entry->h_addr_list[0])));
     }
 }
