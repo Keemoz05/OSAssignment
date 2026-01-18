@@ -31,10 +31,14 @@ int main(int argc, char const *argv[]) {
     char buffer[1024] = {0};
     char name[20];
     const char* server_ip = "127.0.0.1";
+    // ==================================================================================
+    //   SECTION 1: CONNECTION SETUP
+    // ==================================================================================
 
-    // Allow IP as command line argument (for Network Mode)
+     // MODE CHECK: Did the server launch us with an IP?
     if (argc > 1) server_ip = argv[1];
 
+    // Single attempt for auto-mode
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("\n Socket creation error \n");
         return -1;
@@ -53,13 +57,14 @@ int main(int argc, char const *argv[]) {
         return -1;
     }
 
-    // 1. Handshake: Send Name
+    // ==================================================================================
+    //   SECTION 2: HANDSHAKE
+    // ==================================================================================
+    printf("\n>>> CONNECTED TO SERVER <<<\n");
     printf("Enter your name: ");
-    fgets(name, 20, stdin);
-    send(sock, name, strlen(name), 0);
-
-    printf("Waiting for other players to join...\n");
-
+    scanf("%19s", name);
+    send(sock, name, strlen(name) + 1, 0);
+    printf("Waiting for other players...\n");
     // 2. Wait for Game Start
     int signal;
     if (recv(sock, &signal, sizeof(int), 0) <= 0) return -1;

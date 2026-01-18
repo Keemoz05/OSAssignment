@@ -1,0 +1,38 @@
+[16:01:01] [PID:24781] [SYSTEM] Server started
+[16:01:02] [PID:24781] [SYSTEM] Configured for 2 players.
+[16:01:02] [PID:24781] [SYSTEM] Player connected from 127.0.0.1:42798
+[16:01:02] [PID:24781] [SYSTEM] Player connected from 127.0.0.1:42808
+[16:01:02] [PID:24781] [SYSTEM] All 2 players connected. Game starting.
+[16:01:08] [PID:24781] [SCHEDULER] Thread started, waiting for players...
+[16:01:08] [PID:24781] [SCHEDULER] Broadcast turn start
+[16:01:08] [PID:24801] [CHILD] My turn started
+[16:01:23] [PID:24801] [TIMEOUT] Timed Out (Strike 1/3)
+[16:01:23] [PID:24781] [SCHEDULER] Turn completed, advancing...
+[16:01:23] [PID:24781] [SCHEDULER] Broadcast turn start
+[16:01:23] [PID:24802] [CHILD] My turn started
+[16:01:31] [PID:24781] [SCHEDULER] Turn completed, advancing...
+[16:01:31] [PID:24781] [SCHEDULER] Broadcast turn start
+[16:01:31] [PID:24801] [CHILD] My turn started
+[16:41:17] [PID:27516] [SYSTEM] Server started
+[16:41:18] [PID:27516] [SYSTEM] Configured for 2 players.
+[16:41:18] [PID:27516] [SYSTEM] Player connected from 127.0.0.1:42828
+[16:41:18] [PID:27516] [SYSTEM] Player connected from 127.0.0.1:42838
+[16:41:18] [PID:27516] [SYSTEM] All 2 players connected. Game starting.
+[16:41:23] [PID:27516] [SCHEDULER] Thread started, waiting for players...
+[16:41:23] [PID:27516] [SCHEDULER] Broadcast turn start
+[16:41:23] [PID:27523] [CHILD] it is MY turn , sending data to client...
+[16:41:38] [PID:27523] [TIMEOUT] Timed Out (Strike 1/3)
+[16:41:38] [PID:27516] [SCHEDULER] Turn completed, advancing...
+[16:41:38] [PID:27516] [SCHEDULER] Broadcast turn start
+[16:41:38] [PID:27524] [CHILD] it is MY turn , sending data to client...
+[16:41:42] [PID:27524] [TIMEOUT] Timed Out (Strike 1/3)
+[16:41:42] [PID:27516] [SCHEDULER] Turn completed, advancing...
+[16:41:42] [PID:27516] [SCHEDULER] Broadcast turn start
+[16:41:42] [PID:27523] [CHILD] it is MY turn , sending data to client...
+[16:41:57] [PID:27523] [TIMEOUT] Timed Out (Strike 2/3)
+[16:41:57] [PID:27516] [SCHEDULER] Turn completed, advancing...
+[16:41:57] [PID:27516] [SCHEDULER] Broadcast turn start
+[16:41:57] [PID:27524] [CHILD] it is MY turn , sending data to client...
+[16:45:31] [PID:28594] [SYSTEM] Server started
+[16:45:32] [PID:28594] [SYSTEM] Configured for 2 players.
+[16:45:40] [PID:28653] [SYSTEM] Server started
