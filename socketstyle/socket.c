@@ -658,7 +658,7 @@ void handle_client_session(int socket, int player_id) {
         
        // Win Check
         if (strcmp(result, "GGGGG") == 0) {
-            pthread_mutex_lock(&shm->mutex);
+        
 
             // 1. Update session score
             shm->players[player_id].score++;
@@ -686,6 +686,12 @@ void handle_client_session(int socket, int player_id) {
             log_event("GAMEPLAY", log_msg, player_log);
 
             // --- MATCH WIN CONDITION ---
+            if (shm->players[player_id].score >= 3) {
+            int sig = SIGNAL_GAME_OVER;
+            send(socket, &sig, sizeof(int), 0);
+            send(socket, name, strlen(name) + 1, 0);
+}
+
             if (shm->players[player_id].score >= 3) {
                 printf("!!! MATCH OVER: %s is the Grand Champion !!!\n", name);
                 sprintf(log_msg, "MATCH OVER: %s is the Grand Champion", name);

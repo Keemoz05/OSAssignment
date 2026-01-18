@@ -1,2 +1,2 @@
-aiman 0
-sigma 3
+aiman 2
+sigma 6

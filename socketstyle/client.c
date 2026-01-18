@@ -73,7 +73,11 @@ int main(int argc, char const *argv[]) {
 
     // 2. Wait for Game Start
     int signal;
-    if (recv(sock, &signal, sizeof(int), 0) <= 0) return -1;
+    if (recv(sock, &signal, sizeof(int), 0) <= 0) {
+        printf("\n[Disconnected] Server closed connection.\n");
+        close(sock);
+        return 0;
+    }
 
     if (signal == SIGNAL_GAME_START) {
         printf("\n=============================\n");
@@ -84,11 +88,16 @@ int main(int argc, char const *argv[]) {
     // 3. Main Game Loop
     while (1) {
         // Wait for server signal (Turn or Game Over)
-        if (recv(sock, &signal, sizeof(int), 0) <= 0) break;
+        if (recv(sock, &signal, sizeof(int), 0) <= 0) {
+            printf("\n====================================\n");
+            printf("   GAME OVER! Server ended the game\n");
+            printf("====================================\n");
+            break;
+        }
 
         if (signal == SIGNAL_YOUR_TURN) {
             int my_score;
-            recv(sock, &my_score, sizeof(int), 0);
+            if (recv(sock, &my_score, sizeof(int), 0) <= 0) break;
             
             printf("\n===============================");
             printf("\n--- IT IS YOUR TURN ---\n");
@@ -128,7 +137,13 @@ int main(int argc, char const *argv[]) {
 
             // Receive feedback (Result or Skip Message)
             char result[1024] = {0};
-            if (recv(sock, result, 1024, 0) <= 0) break;
+            if (recv(sock, result, 1024, 0) <= 0) {
+                printf("\n====================================\n");
+                printf("   GAME OVER! Server ended the game\n");
+                printf("====================================\n");
+                break;
+            }
+
             printf("Server Feedback: %s\n", result);
 
             if (strcmp(result, "GGGGG") == 0) {
