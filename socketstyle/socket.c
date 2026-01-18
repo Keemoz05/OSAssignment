@@ -656,28 +656,57 @@ void handle_client_session(int socket, int player_id) {
       
         evaluate_guess(guess, shm->target_word, result);
         
-        // Win Check
+       // Win Check
         if (strcmp(result, "GGGGG") == 0) {
+            pthread_mutex_lock(&shm->mutex);
+
+            // 1. Update session score
             shm->players[player_id].score++;
-            
-            // Update Persistent Scoreboard
+
+            // 2. Update Persistent Scoreboard
+            int found = 0;
             for (int i = 0; i < shm->total_recorded_players; i++) {
                 if (strcmp(shm->scoreboard[i].name, name) == 0) {
                     shm->scoreboard[i].wins++;
+                    found = 1;
                     break;
                 }
             }
-            save_scores_to_file();
-            
-            char win_msg[50];
-            sprintf(win_msg , "!!! %s WON! Score: %d !!!", name, shm->players[player_id].score);
-            log_event("WIN", win_msg, player_log);
-            printf("%s\n", win_msg);
 
-            pick_new_word(); // Reset word for next round
+            if (!found && shm->total_recorded_players < 100) {
+                strcpy(shm->scoreboard[shm->total_recorded_players].name, name);
+                shm->scoreboard[shm->total_recorded_players].wins = 1;
+                shm->total_recorded_players++;
+            }
+
+            save_scores_to_file();
+
+            printf("!!! %s WON! Score: %d !!!\n", name, shm->players[player_id].score);
+            sprintf(log_msg , "!!! %s WON! Score: %d !!!", name, shm->players[player_id].score);
+            log_event("GAMEPLAY", log_msg, player_log);
+
+            // --- MATCH WIN CONDITION ---
+            if (shm->players[player_id].score >= 3) {
+                printf("!!! MATCH OVER: %s is the Grand Champion !!!\n", name);
+                sprintf(log_msg, "MATCH OVER: %s is the Grand Champion", name);
+                log_event("GAMEPLAY", log_msg, player_log);
+
+                shm->game_running = 0;
+
+                // Wake everyone so they can exit cleanly
+                shm->turn_completed = 1;
+                pthread_cond_broadcast(&shm->cond_turn_start);
+                pthread_cond_broadcast(&shm->cond_turn_end);
+            } else {
+                // Only reset word if match NOT over
+                pick_new_word();
+            }
+
+            pthread_mutex_unlock(&shm->mutex);
         }
 
         // Finish Turn
+   
         shm->turn_completed = 1;
         pthread_cond_signal(&shm->cond_turn_end);
         pthread_mutex_unlock(&shm->mutex);

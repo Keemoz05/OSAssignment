@@ -63,8 +63,14 @@ int main(int argc, char const *argv[]) {
     printf("\n>>> CONNECTED TO SERVER <<<\n");
     printf("Enter your name: ");
     scanf("%19s", name);
+
+    /* FIX: clear stdin so first fgets() does not instantly read newline */
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+
     send(sock, name, strlen(name) + 1, 0);
     printf("Waiting for other players...\n");
+
     // 2. Wait for Game Start
     int signal;
     if (recv(sock, &signal, sizeof(int), 0) <= 0) return -1;
@@ -86,7 +92,7 @@ int main(int argc, char const *argv[]) {
             
             printf("\n===============================");
             printf("\n--- IT IS YOUR TURN ---\n");
-            printf("\n--- CURRENT SCORE: %d ---", my_score); // Display it!
+            printf("\n--- CURRENT SCORE: %d ---", my_score);
             printf("\n===============================\n");
             printf("Enter 5-letter guess (You have %d seconds): ", TURN_TIMEOUT);
             fflush(stdout);
@@ -106,19 +112,16 @@ int main(int argc, char const *argv[]) {
                 perror("select()");
                 break;
             } else if (retval) {
-                // Input is available
                 char guess[20] = {0};
                 fgets(guess, 20, stdin);
-                guess[strcspn(guess, "\n")] = 0; // Remove newline
+                guess[strcspn(guess, "\n")] = 0;
 
                 if (strlen(guess) == 0) {
-                    // Handle empty enter key as a skip/timeout
                     send(sock, "__TIMEOUT__", 12, 0);
                 } else {
                     send(sock, guess, strlen(guess) + 1, 0);
                 }
             } else {
-                // NO INPUT within TURN_TIMEOUT seconds
                 printf("\n[TIMEOUT] You took too long!\n");
                 send(sock, "__TIMEOUT__", 12, 0);
             }
@@ -127,6 +130,7 @@ int main(int argc, char const *argv[]) {
             char result[1024] = {0};
             if (recv(sock, result, 1024, 0) <= 0) break;
             printf("Server Feedback: %s\n", result);
+
             if (strcmp(result, "GGGGG") == 0) {
                 printf("CORRECT! Resetting board...\n");
             }
