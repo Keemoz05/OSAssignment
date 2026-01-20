@@ -132,6 +132,7 @@ int main(int argc, char const *argv[]) {
             printf("\n===============================\n");
             
             // Replaced v1 Validation Loop with v2 Timeout Logic
+            do{
             printf("Enter 5-letter guess (You have %d seconds): ", TURN_TIMEOUT);
             fflush(stdout);
 
@@ -141,19 +142,24 @@ int main(int argc, char const *argv[]) {
             FD_ZERO(&readfds);
             FD_SET(STDIN_FILENO, &readfds);
 
-            tv.tv_sec = TURN_TIMEOUT;
-            tv.tv_usec = 0;
+            tv.tv_sec = TURN_TIMEOUT; //time out in seconds
+            tv.tv_usec = 0; //we dont need microsecond time values
 
-            int retval = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
+            int retval = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv); 
+            //STDIN_FILENO + 1 = STDOUT_FILENO, FD for the standard output stream, usually the screen
+        
 
             if (retval == -1) {
                 perror("select()");
                 break;
             } else if (retval) {
+
+                
                 // User entered input
                 memset(guess, 0, sizeof(guess));
                 fgets(guess, 20, stdin);
                 guess[strcspn(guess, "\n")] = 0;
+                
 
                 if (strlen(guess) == 0) {
                     send(sock, "__TIMEOUT__", 12, 0);
@@ -165,6 +171,8 @@ int main(int argc, char const *argv[]) {
                 printf("\n[TIMEOUT] You took too long!\n");
                 send(sock, "__TIMEOUT__", 12, 0);
             }
+            }
+                while (strlen(guess) != 5);
             
             // 2. Wait for Evaluation (G/Y/X string)
             memset(result, 0, sizeof(result));
