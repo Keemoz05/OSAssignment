@@ -1,132 +1,180 @@
+/*
+ * ======================================================================================
+ * CLIENT APPLICATION
+ * ======================================================================================
+ * * LOGIC:
+ * 1. Connection: Supports Auto-Connect (args) or Manual Input (loop).
+ * 2. Game Loop: dumb terminal. Waits for signals from Server.
+ * - SIGNAL_GAME_START: Print header.
+ * - SIGNAL_YOUR_TURN: Input loop (validation) -> Send -> Wait for Result.
+ *
+ * COMPILE: gcc client.c -o client
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <signal.h>
-#include <time.h> //added this for logging the activities
-#include "wordbank.h"
-//NOTE: ALWAYS END PRINTF WITH NEWLINE TO AVOID BUFFER/INPUT HALT ISSUES, THERES A REASON SOMEWHERE BUT IM TOO LAZY TO FIND IT
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <ctype.h>
+#include <sys/select.h> // Added for v2 timeout functionality
+
+#define PORT 8080
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
-#define SIGNAL_RESULT 4
-int main(int argc, char *argv[]) {
-    // variable declarations //
-    char guess[51];
+#define TURN_TIMEOUT 15 // Seconds allowed per turn (from v2)
+
+int main(int argc, char const *argv[]) {
+    int sock = 0;
+    struct sockaddr_in server_address;
+    char name[20], guess[20], result[20];
+    char ip_input[50];
+    const char *server_ip; 
+
+    // ==================================================================================
+    //    SECTION 1: CONNECTION SETUP
+    // ==================================================================================
+
+    // MODE CHECK: Did the server launch us with an IP?
+    if (argc > 1) {
+        server_ip = argv[1];
+        printf("Auto-connecting to: %s\n", server_ip);
+
+        // Single attempt for auto-mode
+        if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) { perror("Socket error"); return -1; }
+        server_address.sin_family = AF_INET;
+        server_address.sin_port = htons(PORT);
+        if (inet_pton(AF_INET, server_ip, &server_address.sin_addr) <= 0) { printf("Invalid IP\n"); return -1; }
+        if (connect(sock, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) { printf("Connection Failed\n"); return -1; }
     
+    } else {
+        // MANUAL MODE: Loop until valid connection
+        while (1) {
+            // Sockets must be recreated per attempt
+            if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) { perror("Socket error"); exit(1); }
+            server_address.sin_family = AF_INET;
+            server_address.sin_port = htons(PORT);
 
-    // 1. Get my ID from the arguments passed by Server
-    if (argc < 2) {
-        printf("Error: Run this via the server!\n");
-        return 1;
-    }
-    char *my_id = argv[1]; // my_id will contain the playerr_id argumetn from the server
+            printf("Enter Server IP (Press ENTER for Localhost): ");
+            fgets(ip_input, 50, stdin);
+            ip_input[strcspn(ip_input, "\n")] = 0;
 
+            if (strlen(ip_input) == 0) server_ip = "127.0.0.1";
+            else server_ip = ip_input;
 
-    int fd;
-
-    // buffer to hold player name with sufficient size //
-    char player_name[100];
-
-    // open named pipe file for reading and writing //
-    //fd = open("player_pipe", O_RDWR);
-
-   
-
-    // enter your name //
-    printf("Enter your name:");
-
-    // read player name from standard input //
-    fgets(player_name, sizeof(player_name), stdin);
-
-    //find the \n and cuts it off, try removing this
-    //player_name[strcspn(player_name, "\n")] = 0;
-
-    // write player name to pipe //
-    fd = open("player_pipe", O_WRONLY);
-
-      // error handling if pipe fails to open //
-    if ( fd < 0){
-        perror("Failed to open pipe");
-        exit(1);
-    }
-
-    write(fd, player_name, strlen(player_name));
-    printf("%s sent!\n", player_name);
-
-    close(fd);
-
-    // close the pipe //
-
-    // display the message confirming the player has joined //
-    printf("Player %s has joined the game\n", player_name);
-
-
-    // 2. Open my personal mailbox for READING
-    char my_pipe_name[20];
-    sprintf(my_pipe_name, "p%s", my_id); // becomes "p1", "p2"...
-
-    // IMPORTANT: Client opens this as RDONLY (Read Only)
-    int my_mailbox = open(my_pipe_name, O_RDONLY);
-    while(1) {
-        int signal;
-        int n = read(my_mailbox, &signal, sizeof(int));
-        if (n > 0) {
-            //instead of using strings, what are better ways to signal game start and your turn?
-
-            //======================================================================================
-            //OBJECTIVE:
-            //RECEIVE THE SIGNAL FROM SERVER THAT THE GAME IS STARTING: done
-            //RECEIVE THE SIGNAL FROM SERVER THAT IT IS YOUR TURN NOW:done
-            //SEND THE GUESS TO THE SERVER:done
-            //SERVER THEN WILL SAVE THE GUESS INTO A STRUCT BASED ON PLAYER ID : done
-            //THEN SERVER WILL PROCESS THE GUESS AND SEND BACK THE RESULT TO THE CLIENT
-            //CLIENT WILL THEN DISPLAY THE RESULT TO THE PLAYER
-            //CLIENT WILL WAIT FOR NEXT TURN SIGNAL FROM SERVER
-            //======================================================================================
-
-
-            //CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
-
-            switch(signal) {
-                case SIGNAL_YOUR_TURN:
-                    printf("\n[IT IS YOUR TURN]\n");
-                    do {
-                        printf("Enter your guess (5 letters): "); // Added prompt text
-                        fgets(guess, sizeof(guess), stdin);
-
-                        // FIX: Remove the newline character if it exists
-                        guess[strcspn(guess, "\n")] = 0; 
-
-                    // FIX: Check length. If you want exactly 5 letters, use != 5
-                    } while(strlen(guess) != 5); 
-
-                    fd = open("player_pipe", O_WRONLY);
-                    if (fd < 0){
-                        perror("Failed to open pipe");
-                        exit(1);
-                    }
-
-                    // Send ID
-                    int id_to_send = atoi(my_id);
-                    write(fd, &id_to_send, sizeof(int));
-
-
-                    write(fd, guess, strlen(guess) + 1); // +1 sends the null terminator too
-                    
-                    printf("Sent guess: %s\n", guess);
-                    //server process guess
-                    //server produces a variable called output which will be passed to client terminal
-
-
-                    //close(fd);
-
-                    break;
+            if (inet_pton(AF_INET, server_ip, &server_address.sin_addr) <= 0) {
+                printf(">> Invalid IP Address. Try again.\n");
+                close(sock); continue;
             }
-            //END OF CODE SEGMENT TO PROCESS SIGNALS FROM SERVER
+
+            printf("Connecting to %s...\n", server_ip);
+            if (connect(sock, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
+                printf(">> Connection Failed. Retrying...\n");
+                close(sock); continue;
+            }
+            break; // Connection successful
         }
-            }
-    
     }
+
+    // ==================================================================================
+    //    SECTION 2: HANDSHAKE
+    // ==================================================================================
+    printf("\n>>> CONNECTED TO SERVER <<<\n");
+    printf("Enter your name: ");
+    scanf("%19s", name);
+
+    /* FIX: clear stdin so first fgets() does not instantly read newline (from v2) */
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+
+    send(sock, name, strlen(name) + 1, 0);
+    printf("Waiting for other players...\n");
+
+
+    // ==================================================================================
+    //    SECTION 3: GAME EVENT LOOP
+    // ==================================================================================
+    while (1) {
+        int signal_received;
+        int bytes = recv(sock, &signal_received, sizeof(int), 0);
+        
+        if (bytes <= 0) { printf("\nServer disconnected.\n"); break; }//idk how to handle this :(
+
+        if (signal_received == SIGNAL_GAME_OVER) {
+
+            char winner[20];
+            recv(sock, winner, 20, 0); // Receive the winner's name from server
+
+            printf("\n************************************\n");
+            printf("   MATCH OVER! WE HAVE A WINNER!   \n");
+            printf("************************************\n");
+            
+            printf("\nPress ENTER to close this window...");
+            getchar(); // Clear any leftover newline
+            getchar(); // Wait for actual enter key
+            break;
+        }
+
+        // --- CASE 1: GAME START ---
+        if (signal_received == SIGNAL_GAME_START) {
+            printf("\n>>> GAME STARTED! First to 3 wins takes the match!<<<\n");
+        } 
+        
+        // --- CASE 2: MY TURN ---
+        else if (signal_received == SIGNAL_YOUR_TURN) {
+            int my_score;
+            recv(sock, &my_score, sizeof(int), 0); //Receive score from server
+            printf("\n===============================");
+            printf("\n--- IT IS YOUR TURN ---\n");
+            printf("\n--- CURRENT SCORE: %d ---", my_score); // Display it!
+            printf("\n===============================\n");
+            
+            // Replaced v1 Validation Loop with v2 Timeout Logic
+            printf("Enter 5-letter guess (You have %d seconds): ", TURN_TIMEOUT);
+            fflush(stdout);
+
+            // --- TIMEOUT LOGIC USING select() ---
+            fd_set readfds;
+            struct timeval tv;
+            FD_ZERO(&readfds);
+            FD_SET(STDIN_FILENO, &readfds);
+
+            tv.tv_sec = TURN_TIMEOUT;
+            tv.tv_usec = 0;
+
+            int retval = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
+
+            if (retval == -1) {
+                perror("select()");
+                break;
+            } else if (retval) {
+                // User entered input
+                memset(guess, 0, sizeof(guess));
+                fgets(guess, 20, stdin);
+                guess[strcspn(guess, "\n")] = 0;
+
+                if (strlen(guess) == 0) {
+                    send(sock, "__TIMEOUT__", 12, 0);
+                } else {
+                    send(sock, guess, strlen(guess) + 1, 0);
+                }
+            } else {
+                // Timeout occurred
+                printf("\n[TIMEOUT] You took too long!\n");
+                send(sock, "__TIMEOUT__", 12, 0);
+            }
+            
+            // 2. Wait for Evaluation (G/Y/X string)
+            memset(result, 0, sizeof(result));
+            recv(sock, result, sizeof(result), 0);
+            printf("Feedback: %s\n", result);
+            
+            if (strcmp(result, "GGGGG") == 0) printf("*** YOU WON THIS ROUND! +1 Score ***\n");
+            printf("Waiting for next turn...\n");
+        }
+    }
+    close(sock);
+    return 0;
+}
