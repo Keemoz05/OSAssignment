@@ -167,10 +167,12 @@ int main(int argc, char const *argv[]) {
                             send(sock, guess, strlen(guess) + 1, 0);
                      }   
 
-            } else {
+            } else if(strlen(guess) == 0) {
                 // Timeout occurred
                 printf("\n[TIMEOUT] You took too long!\n");
                 send(sock, "__TIMEOUT__", 12, 0);
+                break;
+               
             }
             
             } while (strlen(guess) != 5);
