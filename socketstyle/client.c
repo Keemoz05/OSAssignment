@@ -124,7 +124,9 @@ int main(int argc, char const *argv[]) {
         
         // --- CASE 2: MY TURN ---
         else if (signal_received == SIGNAL_YOUR_TURN) {
+            memset(guess, 0, sizeof(guess));
             int my_score;
+            int fiveChar = 0;
             recv(sock, &my_score, sizeof(int), 0); //Receive score from server
             printf("\n===============================");
             printf("\n--- IT IS YOUR TURN ---\n");
@@ -132,7 +134,8 @@ int main(int argc, char const *argv[]) {
             printf("\n===============================\n");
             
             // Replaced v1 Validation Loop with v2 Timeout Logic
-            do{
+        
+        do{
             printf("Enter 5-letter guess (You have %d seconds): ", TURN_TIMEOUT);
             fflush(stdout);
 
@@ -154,25 +157,23 @@ int main(int argc, char const *argv[]) {
                 break;
             } else if (retval) {
 
-                
-                // User entered input
                 memset(guess, 0, sizeof(guess));
                 fgets(guess, 20, stdin);
                 guess[strcspn(guess, "\n")] = 0;
-                
 
-                if (strlen(guess) == 0) {
-                    send(sock, "__TIMEOUT__", 12, 0);
-                } else {
-                    send(sock, guess, strlen(guess) + 1, 0);
-                }
+                 if (strlen(guess) != 5) {
+                    printf("Invalid input. Must be exactly 5 letters.\n");
+                    } else {
+                            send(sock, guess, strlen(guess) + 1, 0);
+                     }   
+
             } else {
                 // Timeout occurred
                 printf("\n[TIMEOUT] You took too long!\n");
                 send(sock, "__TIMEOUT__", 12, 0);
             }
-            }
-                while (strlen(guess) != 5);
+            
+            } while (strlen(guess) != 5);
             
             // 2. Wait for Evaluation (G/Y/X string)
             memset(result, 0, sizeof(result));
