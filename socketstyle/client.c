@@ -15,94 +15,123 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
-#include <sys/select.h>
 #include <ctype.h>
+#include <sys/select.h> // Added for v2 timeout functionality
 
 #define PORT 8080
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
-#define TURN_TIMEOUT 15 // Seconds allowed per turn
+#define TURN_TIMEOUT 15 // Seconds allowed per turn (from v2)
 
 int main(int argc, char const *argv[]) {
     int sock = 0;
-    struct sockaddr_in serv_addr;
-    char buffer[1024] = {0};
-    char name[20];
-    const char* server_ip = "127.0.0.1";
-    // ==================================================================================
-    //   SECTION 1: CONNECTION SETUP
-    // ==================================================================================
-
-     // MODE CHECK: Did the server launch us with an IP?
-    if (argc > 1) server_ip = argv[1];
-
-    // Single attempt for auto-mode
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("\n Socket creation error \n");
-        return -1;
-    }
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
-
-    if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
-        printf("\nInvalid address/ Address not supported \n");
-        return -1;
-    }
-
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        printf("\nConnection Failed. Is the server running?\n");
-        return -1;
-    }
+    struct sockaddr_in server_address;
+    char name[20], guess[20], result[20];
+    char ip_input[50];
+    const char *server_ip; 
 
     // ==================================================================================
-    //   SECTION 2: HANDSHAKE
+    //    SECTION 1: CONNECTION SETUP
+    // ==================================================================================
+
+    // MODE CHECK: Did the server launch us with an IP?
+    if (argc > 1) {
+        server_ip = argv[1];
+        printf("Auto-connecting to: %s\n", server_ip);
+
+        // Single attempt for auto-mode
+        if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) { perror("Socket error"); return -1; }
+        server_address.sin_family = AF_INET;
+        server_address.sin_port = htons(PORT);
+        if (inet_pton(AF_INET, server_ip, &server_address.sin_addr) <= 0) { printf("Invalid IP\n"); return -1; }
+        if (connect(sock, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) { printf("Connection Failed\n"); return -1; }
+    
+    } else {
+        // MANUAL MODE: Loop until valid connection
+        while (1) {
+            // Sockets must be recreated per attempt
+            if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) { perror("Socket error"); exit(1); }
+            server_address.sin_family = AF_INET;
+            server_address.sin_port = htons(PORT);
+
+            printf("Enter Server IP (Press ENTER for Localhost): ");
+            fgets(ip_input, 50, stdin);
+            ip_input[strcspn(ip_input, "\n")] = 0;
+
+            if (strlen(ip_input) == 0) server_ip = "127.0.0.1";
+            else server_ip = ip_input;
+
+            if (inet_pton(AF_INET, server_ip, &server_address.sin_addr) <= 0) {
+                printf(">> Invalid IP Address. Try again.\n");
+                close(sock); continue;
+            }
+
+            printf("Connecting to %s...\n", server_ip);
+            if (connect(sock, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
+                printf(">> Connection Failed. Retrying...\n");
+                close(sock); continue;
+            }
+            break; // Connection successful
+        }
+    }
+
+    // ==================================================================================
+    //    SECTION 2: HANDSHAKE
     // ==================================================================================
     printf("\n>>> CONNECTED TO SERVER <<<\n");
     printf("Enter your name: ");
     scanf("%19s", name);
 
-    /* FIX: clear stdin so first fgets() does not instantly read newline */
+    /* FIX: clear stdin so first fgets() does not instantly read newline (from v2) */
     int c;
     while ((c = getchar()) != '\n' && c != EOF);
 
     send(sock, name, strlen(name) + 1, 0);
     printf("Waiting for other players...\n");
 
-    // 2. Wait for Game Start
-    int signal;
-    if (recv(sock, &signal, sizeof(int), 0) <= 0) {
-        printf("\n[Disconnected] Server closed connection.\n");
-        close(sock);
-        return 0;
-    }
 
-    if (signal == SIGNAL_GAME_START) {
-        printf("\n=============================\n");
-        printf("   GAME STARTED! GOOD LUCK!  \n");
-        printf("=============================\n");
-    }
-
-    // 3. Main Game Loop
+    // ==================================================================================
+    //    SECTION 3: GAME EVENT LOOP
+    // ==================================================================================
     while (1) {
-        // Wait for server signal (Turn or Game Over)
-        if (recv(sock, &signal, sizeof(int), 0) <= 0) {
-            printf("\n====================================\n");
-            printf("   GAME OVER! Server ended the game\n");
-            printf("====================================\n");
+        int signal_received;
+        int bytes = recv(sock, &signal_received, sizeof(int), 0);
+        
+        if (bytes <= 0) { printf("\nServer disconnected.\n"); break; }//idk how to handle this :(
+
+        if (signal_received == SIGNAL_GAME_OVER) {
+
+            char winner[20];
+            recv(sock, winner, 20, 0); // Receive the winner's name from server
+
+            printf("\n************************************\n");
+            printf("   MATCH OVER! WE HAVE A WINNER!   \n");
+            printf("************************************\n");
+            
+            printf("\nPress ENTER to close this window...");
+            getchar(); // Clear any leftover newline
+            getchar(); // Wait for actual enter key
             break;
         }
 
-        if (signal == SIGNAL_YOUR_TURN) {
+        // --- CASE 1: GAME START ---
+        if (signal_received == SIGNAL_GAME_START) {
+            printf("\n>>> GAME STARTED! First to 3 wins takes the match!<<<\n");
+        } 
+        
+        // --- CASE 2: MY TURN ---
+        else if (signal_received == SIGNAL_YOUR_TURN) {
             int my_score;
-            if (recv(sock, &my_score, sizeof(int), 0) <= 0) break;
-            
+            recv(sock, &my_score, sizeof(int), 0); //Receive score from server
             printf("\n===============================");
             printf("\n--- IT IS YOUR TURN ---\n");
-            printf("\n--- CURRENT SCORE: %d ---", my_score);
+            printf("\n--- CURRENT SCORE: %d ---", my_score); // Display it!
             printf("\n===============================\n");
+            
+            // Replaced v1 Validation Loop with v2 Timeout Logic
             printf("Enter 5-letter guess (You have %d seconds): ", TURN_TIMEOUT);
             fflush(stdout);
 
@@ -121,7 +150,8 @@ int main(int argc, char const *argv[]) {
                 perror("select()");
                 break;
             } else if (retval) {
-                char guess[20] = {0};
+                // User entered input
+                memset(guess, 0, sizeof(guess));
                 fgets(guess, 20, stdin);
                 guess[strcspn(guess, "\n")] = 0;
 
@@ -131,35 +161,20 @@ int main(int argc, char const *argv[]) {
                     send(sock, guess, strlen(guess) + 1, 0);
                 }
             } else {
+                // Timeout occurred
                 printf("\n[TIMEOUT] You took too long!\n");
                 send(sock, "__TIMEOUT__", 12, 0);
             }
-
-            // Receive feedback (Result or Skip Message)
-            char result[1024] = {0};
-            if (recv(sock, result, 1024, 0) <= 0) {
-                printf("\n====================================\n");
-                printf("   GAME OVER! Server ended the game\n");
-                printf("====================================\n");
-                break;
-            }
-
-            printf("Server Feedback: %s\n", result);
-
-            if (strcmp(result, "GGGGG") == 0) {
-                printf("CORRECT! Resetting board...\n");
-            }
-
-        } else if (signal == SIGNAL_GAME_OVER) {
-            char winner[20] = {0};
-            recv(sock, winner, 20, 0);
-            printf("\n====================================\n");
-            printf("   GAME OVER! Winner: %s\n", winner);
-            printf("====================================\n");
-            break;
+            
+            // 2. Wait for Evaluation (G/Y/X string)
+            memset(result, 0, sizeof(result));
+            recv(sock, result, sizeof(result), 0);
+            printf("Feedback: %s\n", result);
+            
+            if (strcmp(result, "GGGGG") == 0) printf("*** YOU WON THIS ROUND! +1 Score ***\n");
+            printf("Waiting for next turn...\n");
         }
     }
-
     close(sock);
     return 0;
 }
