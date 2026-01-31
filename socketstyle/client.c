@@ -18,11 +18,13 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <sys/select.h> // Added for v2 timeout functionality
 
 #define PORT 8080
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
+#define TURN_TIMEOUT 15 // Seconds allowed per turn (from v2)
 
 int main(int argc, char const *argv[]) {
     int sock = 0;
@@ -32,7 +34,7 @@ int main(int argc, char const *argv[]) {
     const char *server_ip; 
 
     // ==================================================================================
-    //   SECTION 1: CONNECTION SETUP
+    //    SECTION 1: CONNECTION SETUP
     // ==================================================================================
 
     // MODE CHECK: Did the server launch us with an IP?
@@ -77,17 +79,22 @@ int main(int argc, char const *argv[]) {
     }
 
     // ==================================================================================
-    //   SECTION 2: HANDSHAKE
+    //    SECTION 2: HANDSHAKE
     // ==================================================================================
     printf("\n>>> CONNECTED TO SERVER <<<\n");
     printf("Enter your name: ");
     scanf("%19s", name);
+
+    /* FIX: clear stdin so first fgets() does not instantly read newline (from v2) */
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+
     send(sock, name, strlen(name) + 1, 0);
     printf("Waiting for other players...\n");
 
 
     // ==================================================================================
-    //   SECTION 3: GAME EVENT LOOP
+    //    SECTION 3: GAME EVENT LOOP
     // ==================================================================================
     while (1) {
         int signal_received;
@@ -117,29 +124,58 @@ int main(int argc, char const *argv[]) {
         
         // --- CASE 2: MY TURN ---
         else if (signal_received == SIGNAL_YOUR_TURN) {
+            memset(guess, 0, sizeof(guess));
             int my_score;
+            int fiveChar = 0;
             recv(sock, &my_score, sizeof(int), 0); //Receive score from server
             printf("\n===============================");
             printf("\n--- IT IS YOUR TURN ---\n");
             printf("\n--- CURRENT SCORE: %d ---", my_score); // Display it!
             printf("\n===============================\n");
             
-            // Input Validation Loop
-            while (1) {
-                printf("Enter 5-letter guess: ");
-                scanf("%19s", guess);
-                
-                if (strlen(guess) != 5) { printf(">> Error: Must be 5 letters.\n"); continue; }
-                
-                int valid = 1;
-                for(int i=0; i<5; i++) if(!isalpha(guess[i])) valid = 0;
-                if (!valid) { printf(">> Error: Letters only.\n"); continue; }
-                
-                break; // Valid input
+            // Replaced v1 Validation Loop with v2 Timeout Logic
+        
+        do{
+            printf("Enter 5-letter guess (You have %d seconds): ", TURN_TIMEOUT);
+            fflush(stdout);
+
+            // --- TIMEOUT LOGIC USING select() ---
+            fd_set readfds;
+            struct timeval tv;
+            FD_ZERO(&readfds);
+            FD_SET(STDIN_FILENO, &readfds);
+
+            tv.tv_sec = TURN_TIMEOUT; //time out in seconds
+            tv.tv_usec = 0; //we dont need microsecond time values
+
+            int retval = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv); 
+            //STDIN_FILENO + 1 = STDOUT_FILENO, FD for the standard output stream, usually the screen
+        
+
+            if (retval == -1) {
+                perror("select()");
+                break;
+            } else if (retval) {
+
+                memset(guess, 0, sizeof(guess));
+                fgets(guess, 20, stdin);
+                guess[strcspn(guess, "\n")] = 0;
+
+                 if (strlen(guess) != 5) {
+                    printf("Invalid input. Must be exactly 5 letters.\n");
+                    } else {
+                            send(sock, guess, strlen(guess) + 1, 0);
+                     }   
+
+            } else if(strlen(guess) == 0) {
+                // Timeout occurred
+                printf("\n[TIMEOUT] You took too long!\n");
+                send(sock, "__TIMEOUT__", 12, 0);
+                break;
+               
             }
             
-            // 1. Send Guess
-            send(sock, guess, strlen(guess) + 1, 0);
+            } while (strlen(guess) != 5);
             
             // 2. Wait for Evaluation (G/Y/X string)
             memset(result, 0, sizeof(result));
