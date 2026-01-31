@@ -63,10 +63,10 @@ typedef struct {
 } PlayerData;
 
 typedef struct {
-    char tag[16];
-    char msg[MAX_LOG_MSG];
-    char file[32];
-    int pid;
+    char tag[16];        // Event type (SYSTEM, GAMEPLAY, SCHEDULER, CHILD)
+    char msg[128];       // Log message
+    char file[32];       // Optional player-specific log file
+    int pid;             // Process ID for tracing
 } LogEntry;
 
 // THE SHARED MEMORY OBJECT
@@ -656,7 +656,7 @@ void handle_client_session(int socket, int player_id) {
       
         evaluate_guess(guess, shm->target_word, result);
         
-       // Win Check
+       // On Round Win
         if (strcmp(result, "GGGGG") == 0) {
         
 
