@@ -107,10 +107,6 @@ int main(int argc, char const *argv[]) {
             printf("\n************************************\n");
             printf("   SERVER SHUTTING DOWN. GOODBYE!  \n");
             printf("************************************\n");
-            
-            printf("\nPress ENTER to close this window...");
-            getchar(); // Clear any leftover newline
-            getchar(); // Wait for actual enter key
             break;
         }
         
