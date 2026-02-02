@@ -2,30 +2,32 @@ players ?= 3
 flags = -pthread
 
 #add comment with hashtag
-all: server client createpipes
+all: client socket 
 
-server: server.c wordbank.c
-	gcc $(flags) server.c wordbank.c -o server  
+socket: socket.c wordbank.c
+	gcc $(flags) socket.c wordbank.c -o socket  
 
 client: client.c
 	gcc $(flags) client.c -o client 
 
 
-
-
-
-
-createpipes:
-	-mkfifo player_pipe 2> /dev/null      
-
 run:all
-	./server
+	./socket
 kill:
 	@echo "Killing all game processes..."
-	-pkill -f "\./server"
+	-pkill -f "\./socket"
 	-pkill -f "\./client"
-	-rm player_pipe p1 p2 p3 2> /dev/null
 	@echo "Done."
+
+
+clean-logs:
+	@echo "Removing all log files..."
+	-rm -f server_log.txt
+	-rm -f log_*.txt
+	-rm -f game.log
+	-rm -f scores.txt
+	@echo "Logs cleared."
+
 
 test:
 	@echo "Hows your knee"
