@@ -107,11 +107,7 @@ int main(int argc, char const *argv[]) {
             printf("\n************************************\n");
             printf("   SERVER SHUTTING DOWN. GOODBYE!  \n");
             printf("************************************\n");
-            
-            printf("\nPress ENTER to close this window...");
-            getchar(); // Clear any leftover newline
-            getchar(); // Wait for actual enter key
-            break;
+            break; // Auto-close terminal
         }
         
         // --- CASE: WAIT FOR RESTART DECISION ---
@@ -120,7 +116,12 @@ int main(int argc, char const *argv[]) {
             recv(sock, winner, 20, 0); // Receive the winner's name from server
             
             printf("\n************************************\n");
-            printf("   GRAND CHAMPION: %s\n", winner);
+            // Check if this client is the winner
+            if (strcmp(winner, name) == 0) {
+                printf("   YOU ARE THE GRAND CHAMPION!     \n");
+            } else {
+                printf("   GRAND CHAMPION: %s\n", winner);
+            }
             printf("************************************\n");
             printf("\n>>> Awaiting server input... <<<\n");
             printf("(Input is disabled)\n");
