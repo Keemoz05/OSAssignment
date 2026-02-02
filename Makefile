@@ -4,8 +4,8 @@ flags = -pthread
 #add comment with hashtag
 all: client socket 
 
-socket: socket.c wordbank.c
-	gcc $(flags) socket.c wordbank.c -o socket  
+socket: socket.c
+	gcc $(flags) socket.c  -o socket  
 
 client: client.c
 	gcc $(flags) client.c -o client 

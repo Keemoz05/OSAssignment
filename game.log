@@ -41,3 +41,9 @@
 [01:40:53] [PID:102858] [GAMEPLAY] MATCH OVER: clean3 is the Grand Champion
 [01:40:53] [PID:102636] [SCHEDULER] Turn completed, advancing...
 [01:41:39] [PID:102636] [SYSTEM] Host chose to shut down
+[02:12:09] [PID:109425] [SYSTEM] Server started
+[02:12:11] [PID:109425] [SYSTEM] Configured for 3 players.
+[02:12:11] [PID:109425] [SYSTEM] Player connected from 127.0.0.1:35440
+[02:12:11] [PID:109425] [SYSTEM] Player connected from 127.0.0.1:35452
+[02:12:11] [PID:109425] [SYSTEM] Player connected from 127.0.0.1:35466
+[02:12:11] [PID:109425] [SYSTEM] All 3 players connected. Game starting.
