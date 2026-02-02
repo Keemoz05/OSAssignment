@@ -181,8 +181,12 @@ int main(int argc, char const *argv[]) {
             } while (strlen(guess) != 5);
             
             // 2. Wait for Evaluation (G/Y/X string)
+            // Read byte-by-byte to avoid consuming subsequent messages in TCP stream
             memset(result, 0, sizeof(result));
-            recv(sock, result, sizeof(result), 0);
+            for (int i = 0; i < sizeof(result) - 1; i++) {
+                if (recv(sock, &result[i], 1, 0) <= 0) break;
+                if (result[i] == '\0') break;
+            }
             printf("Feedback: %s\n", result);
             
             if (strcmp(result, "GGGGG") == 0) printf("*** YOU WON THIS ROUND! +1 Score ***\n");
