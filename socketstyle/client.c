@@ -24,6 +24,7 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
+#define SIGNAL_NEW_GAME   4  // Server wants to restart game
 #define TURN_TIMEOUT 15 // Seconds allowed per turn (from v2)
 
 int main(int argc, char const *argv[]) {
@@ -109,11 +110,23 @@ int main(int argc, char const *argv[]) {
 
             printf("\n************************************\n");
             printf("   MATCH OVER! WE HAVE A WINNER!   \n");
+            printf("   Winner: %s\n", winner);
             printf("************************************\n");
             
+            // Check if server is starting a new game
+            printf("\nWaiting for server decision...\n");
+            int next_signal;
+            int check_bytes = recv(sock, &next_signal, sizeof(int), 0);
+            
+            if (check_bytes > 0 && next_signal == SIGNAL_NEW_GAME) {
+                printf("\n>>> NEW GAME STARTING! <<<\n");
+                printf("Waiting for all players to reconnect...\n");
+                continue;  // Stay in loop, wait for next GAME_START
+            }
+            
+            // No new game - exit
             printf("\nPress ENTER to close this window...");
-            getchar(); // Clear any leftover newline
-            getchar(); // Wait for actual enter key
+            getchar();
             break;
         }
 
