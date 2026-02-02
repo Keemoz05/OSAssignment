@@ -541,19 +541,10 @@ void *scheduler_thread_func(void *arg) {
                 } else {
                     printf("[System] Shutting down server...\n");
                     log_event("SYSTEM", "Host chose to shut down", NULL);
-                    
-                    // Save scores (same as Ctrl+C shutdown)
-                    save_scores_to_file();
-                    printf("[System] Scores saved.\n");
-                    
-                    shm->restart_confirmed = 0;
-                    shm->waiting_restart = 0;
-                    shm->game_running = 0;
-                    
-                    // Wake all children so they can exit
-                    pthread_cond_broadcast(&shm->cond_turn_start);
                     pthread_mutex_unlock(&shm->mutex);
-                    break;
+                    
+                    // Call handle_shutdown same as Ctrl+C
+                    handle_shutdown(0);
                 }
             }
             continue;
