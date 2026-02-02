@@ -812,15 +812,12 @@ void handle_client_session(int socket, int player_id) {
                 pthread_cond_broadcast(&shm->cond_turn_start);
                 pthread_cond_broadcast(&shm->cond_turn_end);
                 
-                pthread_mutex_unlock(&shm->mutex);
-                
-                // Send GGGGG result first so client shows "YOU WON THIS ROUND"
-                send(socket, result, strlen(result) + 1, 0);
-                
-                // Then send WAIT_RESTART signal to this client (winner)
+                // Send WAIT_RESTART signal to this client (winner)
                 int sig = SIGNAL_WAIT_RESTART;
                 send(socket, &sig, sizeof(int), 0);
                 send(socket, name, strlen(name) + 1, 0);
+                
+                pthread_mutex_unlock(&shm->mutex);
                 
                 // Wait for host decision
                 pthread_mutex_lock(&shm->mutex);
