@@ -119,11 +119,11 @@ int main(int argc, char const *argv[]) {
             char winner[20];
             recv(sock, winner, 20, 0); // Receive the winner's name from server
             
-            printf("\n============================================\n");
+            printf("\n************************************\n");
             printf("   GRAND CHAMPION: %s\n", winner);
-            printf("============================================\n");
+            printf("************************************\n");
             printf("\n>>> Awaiting server input... <<<\n");
-            printf("(Your input is disabled)\n");
+            printf("(Input is disabled)\n");
             
             // Wait for next signal from server (GAME_START for restart, GAME_OVER for shutdown)
             // No input is allowed here - client just waits
