@@ -96,3 +96,7 @@ Player amount: 3
 [2026-01-11 19:13:14] Player joined: ID=2 Name=ayam
 ========================= Game 25=============================
 [2026-01-15 07:11:36] Game session started
+========================= Game 26=============================
+[2026-02-02 12:45:35] Game session started
+Player amount: 3
+[2026-02-02 12:45:39] Player amount selected: 3
