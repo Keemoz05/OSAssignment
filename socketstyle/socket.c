@@ -287,6 +287,10 @@ int main() {
     // ------------ logging for players who joined the game ------------- //
     printf("Enter number of players (Max %d): ", MAX_PLAYERS);
     if (scanf("%d", &shm->player_count) != 1) return 1;
+    
+    // Clear stdin buffer to prevent leftover newline affecting later fgets
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
 
     char log_msg[64];
     sprintf(log_msg, "Configured for %d players.", shm->player_count);
