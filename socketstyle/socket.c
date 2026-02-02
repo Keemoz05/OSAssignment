@@ -237,8 +237,16 @@ void handle_shutdown(int sig) {
     printf("\n[System] Shutdown signal received. Saving scores...\n");
     if (shm != NULL) {
         pthread_mutex_lock(&shm->mutex);
+        shm->game_running = 0;
+        shm->waiting_restart = 0;
+        pthread_cond_broadcast(&shm->cond_turn_start);
+        pthread_cond_broadcast(&shm->log_cond);
         save_scores_to_file();
         pthread_mutex_unlock(&shm->mutex);
+        
+        // Give children time to send GAME_OVER to clients
+        usleep(100000); // 100ms
+        
         munmap(shm, sizeof(GameState));
     }
     printf("[System] Scores saved. Goodbye!\n");
