@@ -46,10 +46,45 @@
 
 // Database of words for the game
 const char word_database[][6] = {
+    // Original List
     "APPLE", "BEACH", "BRAIN", "BREAD", "BRUSH",
     "CHAIR", "CHEST", "CHORD", "CLICK", "CLOCK",
     "CLOUD", "DANCE", "DIARY", "DRINK", "DRIVE",
-    "EARTH", "FEAST", "FIELD", "FRUIT", "GLASS"
+    "EARTH", "FEAST", "FIELD", "FRUIT", "GLASS",
+    
+    // Expansion
+    "GHOST", "GLOVE", "GRAPE", "GRASS", "GUEST",
+    "HEART", "HEAVY", "HONEY", "HORSE", "HOTEL",
+    "IMAGE", "INDEX", "INPUT", "ISSUE", "IVORY",
+    "JUICE", "JOINT", "JUDGE", "JUMP", "JEWEL",
+    "KNIFE", "KNOCK", "KNOWN", "KOALA", "KAYAK",
+    "LABEL", "LARGE", "LASER", "LAUGH", "LEMON",
+    "MAGIC", "MAJOR", "MAKER", "MARCH", "METAL",
+    "MONEY", "MONTH", "MOTOR", "MOUSE", "MUSIC",
+    "NIGHT", "NOISE", "NORTH", "NURSE", "NOVEL",
+    "OCEAN", "OFFER", "ONION", "ORDER", "OTHER",
+    "PAINT", "PANEL", "PAPER", "PARTY", "PEACE",
+    "PHONE", "PHOTO", "PIANO", "PILOT", "PITCH",
+    "PLANE", "PLANT", "PLATE", "POINT", "POWER",
+    "QUICK", "QUIET", "QUEEN", "QUEST", "QUEUE",
+    "RADIO", "RANGE", "RATIO", "REACH", "RIVER",
+    "SCALE", "SCENE", "SCOPE", "SCORE", "SENSE",
+    "SHAPE", "SHARE", "SHEEP", "SHEET", "SHIFT",
+    "SHIRT", "SHOCK", "SIGHT", "SKILL", "SLEEP",
+    "SMILE", "SMOKE", "SOUND", "SOUTH", "SPACE",
+    "SPEED", "SPORT", "SPRING", "STAGE", "START",
+    "STATE", "STEAM", "STEEL", "STOCK", "STONE",
+    "STORE", "STORM", "STORY", "STRIP", "SUGAR",
+    "TABLE", "TASTE", "THEME", "THING", "TITLE",
+    "TOTAL", "TOUCH", "TOWER", "TRACK", "TRADE",
+    "TRAIN", "TREAT", "TRUCK", "TRUST", "TRUTH",
+    "UNCLE", "UNION", "UNITY", "UPPER", "URBAN",
+    "VALUE", "VIDEO", "VIRUS", "VISIT", "VOICE",
+    "WASTE", "WATCH", "WATER", "WHEEL", "WHOLE",
+    "WOMAN", "WORLD", "WRITE", "WRONG", "WHEAT",
+    "XENON", "XEROX", "XYLEM", // X is rare
+    "YACHT", "YEARN", "YEAST", "YIELD", "YOUNG",
+    "ZEBRA", "ZEROS", "ZONES"
 };
 #define WORD_COUNT 20
 

@@ -114,7 +114,6 @@ int main(int argc, char const *argv[]) {
             printf("   GRAND CHAMPION: %s\n", winner);
             printf("============================================\n");
             printf("\n>>> Awaiting server input... <<<\n");
-            printf("(Your input is disabled)\n");
             
             // Wait for next signal from server (GAME_START for restart, GAME_OVER for shutdown)
             // No input is allowed here - client just waits
