@@ -72,7 +72,7 @@ const char word_database[][6] = {
     "SHAPE", "SHARE", "SHEEP", "SHEET", "SHIFT",
     "SHIRT", "SHOCK", "SIGHT", "SKILL", "SLEEP",
     "SMILE", "SMOKE", "SOUND", "SOUTH", "SPACE",
-    "SPEED", "SPORT", "SPRING", "STAGE", "START",
+    "SPEED", "SPORT", "STAFF", "STAGE", "START",
     "STATE", "STEAM", "STEEL", "STOCK", "STONE",
     "STORE", "STORM", "STORY", "STRIP", "SUGAR",
     "TABLE", "TASTE", "THEME", "THING", "TITLE",
