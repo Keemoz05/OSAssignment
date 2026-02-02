@@ -846,7 +846,10 @@ void handle_client_session(int socket, int player_id) {
                 pthread_cond_broadcast(&shm->cond_turn_start);
                 pthread_cond_broadcast(&shm->cond_turn_end);
                 
-                // Send WAIT_RESTART signal to this client (winner)
+                // Send feedback to winner FIRST (client is waiting for it)
+                send(socket, result, strlen(result) + 1, 0);
+                
+                // Then send WAIT_RESTART signal to this client (winner)
                 int sig = SIGNAL_WAIT_RESTART;
                 send(socket, &sig, sizeof(int), 0);
                 send(socket, name, strlen(name) + 1, 0);
