@@ -103,35 +103,34 @@ int main(int argc, char const *argv[]) {
         
         if (bytes <= 0) { printf("\nServer disconnected.\n"); break; }//idk how to handle this :(
 
-        // --- CASE: GAME OVER (server shutdown) ---
         if (signal_received == SIGNAL_GAME_OVER) {
+
             char winner[20];
-            recv(sock, winner, 20, 0);
+            recv(sock, winner, 20, 0); // Receive the winner's name from server
 
             printf("\n************************************\n");
-            printf("   SERVER SHUTTING DOWN\n");
-            printf("   Final Winner: %s\n", winner);
+            printf("   MATCH OVER! WE HAVE A WINNER!   \n");
+            printf("   Winner: %s\n", winner);
             printf("************************************\n");
             
+            // Check if server is starting a new game
+            printf("\nWaiting for server decision...\n");
+            int next_signal;
+            int check_bytes = recv(sock, &next_signal, sizeof(int), 0);
+            
+            if (check_bytes > 0 && next_signal == SIGNAL_NEW_GAME) {
+                printf("\n>>> NEW GAME STARTING! <<<\n");
+                printf("Waiting for all players to reconnect...\n");
+                continue;  // Stay in loop, wait for next GAME_START
+            }
+            
+            // No new game - exit
             printf("\nPress ENTER to close this window...");
             getchar();
             break;
         }
-        
-        // --- CASE: NEW MATCH (someone won 3 rounds) ---
-        if (signal_received == SIGNAL_NEW_GAME) {
-            char winner[20];
-            recv(sock, winner, 20, 0);
 
-            printf("\n************************************\n");
-            printf("   MATCH OVER! %s WINS!\n", winner);
-            printf("************************************\n");
-            printf("\n>>> NEW MATCH STARTING! Scores reset. <<<\n");
-            printf("Waiting for next turn...\n");
-            continue;  // Stay in loop, keep playing
-        }
-
-        // --- CASE: GAME START ---
+        // --- CASE 1: GAME START ---
         if (signal_received == SIGNAL_GAME_START) {
             printf("\n>>> GAME STARTED! First to 3 wins takes the match!<<<\n");
         } 
