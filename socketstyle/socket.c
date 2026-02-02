@@ -92,7 +92,7 @@ typedef struct {
     int turn_completed;     // Handshake flag to prevent double-turns
     int waiting_restart;    // 1 = waiting for host to decide on restart
     int restart_confirmed;  // 1 = restart yes, 0 = shutdown
-    char grand_champion_name[20]; // Name of the match winner for all clients to display
+    char grand_champion_name[20]; // Name of the grand champion
     int log_head;           // logging queue head
     int log_tail;           // logging queue tail
     
@@ -542,8 +542,9 @@ void *scheduler_thread_func(void *arg) {
                     printf("[System] Shutting down server...\n");
                     log_event("SYSTEM", "Host chose to shut down", NULL);
                     
-                    // Save scores before shutdown (same as Ctrl+C behavior)
+                    // Save scores (same as Ctrl+C shutdown)
                     save_scores_to_file();
+                    printf("[System] Scores saved.\n");
                     
                     shm->restart_confirmed = 0;
                     shm->waiting_restart = 0;
@@ -670,7 +671,7 @@ void handle_client_session(int socket, int player_id) {
         
         // Check if waiting_restart is set (for non-winner players)
         if (shm->waiting_restart && shm->current_turn_index != player_id) {
-            // Send wait signal to this client with the grand champion's name
+            // Send wait signal to this client with actual champion name
             int wait_sig = SIGNAL_WAIT_RESTART;
             char champion_name[20];
             strcpy(champion_name, shm->grand_champion_name);
@@ -804,7 +805,7 @@ void handle_client_session(int socket, int player_id) {
                 // Signal clients to wait while host decides on restart
                 shm->waiting_restart = 1;
                 shm->restart_confirmed = 0;
-                strcpy(shm->grand_champion_name, name); // Store winner name for all clients
+                strcpy(shm->grand_champion_name, name); // Store winner's name for all clients
                 
                 // Wake everyone so they see waiting_restart
                 shm->turn_completed = 1;
@@ -841,15 +842,16 @@ void handle_client_session(int socket, int player_id) {
             } else {
                 // Only reset word if match NOT over
                 pick_new_word();
+                shm->turn_completed = 1;
+                pthread_cond_signal(&shm->cond_turn_end);
                 pthread_mutex_unlock(&shm->mutex);
             }
+        } else {
+            // Finish Turn (only if NOT a round win - that case handles its own mutex)
+            shm->turn_completed = 1;
+            pthread_cond_signal(&shm->cond_turn_end);
+            pthread_mutex_unlock(&shm->mutex);
         }
-
-        // Finish Turn
-   
-        shm->turn_completed = 1;
-        pthread_cond_signal(&shm->cond_turn_end);
-        pthread_mutex_unlock(&shm->mutex);
 
         // Send Feedback to Client
         send(socket, result, strlen(result) + 1, 0);
