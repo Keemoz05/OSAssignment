@@ -92,6 +92,7 @@ typedef struct {
     int turn_completed;     // Handshake flag to prevent double-turns
     int waiting_restart;    // 1 = waiting for host to decide on restart
     int restart_confirmed;  // 1 = restart yes, 0 = shutdown
+    char grand_champion_name[20]; // Name of the grand champion
     int log_head;           // logging queue head
     int log_tail;           // logging queue tail
     
@@ -541,6 +542,10 @@ void *scheduler_thread_func(void *arg) {
                     printf("[System] Shutting down server...\n");
                     log_event("SYSTEM", "Host chose to shut down", NULL);
                     
+                    // Save scores (same as Ctrl+C shutdown)
+                    save_scores_to_file();
+                    printf("[System] Scores saved.\n");
+                    
                     shm->restart_confirmed = 0;
                     shm->waiting_restart = 0;
                     shm->game_running = 0;
@@ -666,13 +671,14 @@ void handle_client_session(int socket, int player_id) {
         
         // Check if waiting_restart is set (for non-winner players)
         if (shm->waiting_restart && shm->current_turn_index != player_id) {
-            // Send wait signal to this client
+            // Send wait signal to this client with actual champion name
             int wait_sig = SIGNAL_WAIT_RESTART;
-            char empty_name[20] = "See other window";
+            char champion_name[20];
+            strcpy(champion_name, shm->grand_champion_name);
             pthread_mutex_unlock(&shm->mutex);
             
             send(socket, &wait_sig, sizeof(int), 0);
-            send(socket, empty_name, strlen(empty_name) + 1, 0);
+            send(socket, champion_name, strlen(champion_name) + 1, 0);
             
             // Wait for host decision
             pthread_mutex_lock(&shm->mutex);
@@ -799,6 +805,7 @@ void handle_client_session(int socket, int player_id) {
                 // Signal clients to wait while host decides on restart
                 shm->waiting_restart = 1;
                 shm->restart_confirmed = 0;
+                strcpy(shm->grand_champion_name, name); // Store winner's name for all clients
                 
                 // Wake everyone so they see waiting_restart
                 shm->turn_completed = 1;
