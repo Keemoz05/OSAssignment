@@ -40,7 +40,6 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
-#define SIGNAL_NEW_GAME   4  // Signal to restart game
 #define MAX_LOG_MSG 128
 #define LOG_QUEUE_SIZE 100
 
@@ -90,8 +89,6 @@ typedef struct {
     int game_running;       // 1 = Game On, 0 = Game Over
     int game_started;       // 1 = All players connected, start allowed
     int turn_completed;     // Handshake flag to prevent double-turns
-    int new_game_pending;   // 1 = Server wants to restart, clients should wait
-    int match_winner_id;    // ID of the player who won the match (-1 if none)
     int log_head;           // logging queue head
     int log_tail;           // logging queue tail
     
@@ -290,7 +287,12 @@ int main() {
 
     char log_msg[64];
     sprintf(log_msg, "Configured for %d players.", shm->player_count);
-    log_event("SYSTEM", log_msg, NULL);
+    log_event("SYSTEM" , log_msg , NULL);
+   
+    // Start the Referee (Scheduler) Thread
+    // This thread runs in the background of the Parent Process
+    pthread_t tid;
+    pthread_create(&tid, NULL, scheduler_thread_func, NULL);
 
     // Socket Boilerplate
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -306,104 +308,58 @@ int main() {
     }
     listen(server_fd, MAX_PLAYERS);
 
-    // ==================== OUTER GAME LOOP (Multi-Game Support) ====================
-    int play_again = 1;
-    while (play_again) {
-        
-        // Handling Launch Modes (only on first game for local mode)
-        static int first_game = 1;
-        if (mode == 1 && first_game) {
-            printf("[System] Launching %d local client terminals...\n", shm->player_count);
-            for (int i = 0; i < shm->player_count; i++) {
-                if (fork() == 0) {
-                    char title[20];
-                    sprintf(title, "Player %d", i + 1);
-                    execlp("xterm", "xterm", "-T", title, "-e", "./client", "127.0.0.1", NULL);
-                    exit(0);
-                }
-            }
-            first_game = 0;
-        } else if (mode == 2 && first_game) {
-            printf("\n[System] Network Mode Enabled.\n");
-            print_local_ip();
-            printf("Ask %d players to connect to the IP above.\n", shm->player_count);
-            first_game = 0;
-        } else if (!first_game) {
-            printf("\n[System] Waiting for players to reconnect for new game...\n");
-        }
-
-        // Start the Referee (Scheduler) Thread for this game
-        pthread_t tid;
-        pthread_create(&tid, NULL, scheduler_thread_func, NULL);
-
-        // Accept Loop
-        int connected_count = 0;
-        while (connected_count < shm->player_count) {
-            printf("[System] Waiting for players: %d/%d connected...\n", connected_count, shm->player_count);
-            int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
-
-            if (new_socket >= 0 ){
-                char log_conn_msg[64];
-                sprintf(log_conn_msg , "Player connected from %s:%d" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
-                log_event("SYSTEM" , log_conn_msg , NULL);
-            }
-
-            if (new_socket < 0) continue;
-
+    // Handling Launch Modes
+    if (mode == 1) {
+        printf("[System] Launching %d local client terminals...\n", shm->player_count);
+        for (int i = 0; i < shm->player_count; i++) {
             if (fork() == 0) {
-                // --- CHILD PROCESS CODE ---
-                close(server_fd); // Child doesn't need the listener
-                handle_client_session(new_socket, connected_count);
-                exit(0); // Kill child when session ends, reaping will occur
-            } else {
-                // --- PARENT PROCESS CODE ---
-                close(new_socket); // Parent doesn't need the specific client socket
-                connected_count++;
+                char title[20];
+                sprintf(title, "Player %d", i + 1);
+                execlp("xterm", "xterm", "-T", title, "-e", "./client", "127.0.0.1", NULL);
+                exit(0);
             }
         }
-        
-        printf("[System] All players connected. Main process waiting for Scheduler.\n");
+    } else {
+        printf("\n[System] Network Mode Enabled.\n");
+        print_local_ip();
+        printf("Ask %d players to connect to the IP above.\n", shm->player_count);
+    }
 
-        char log_start_msg[64];
-        sprintf(log_start_msg , "All %d players connected. Game starting." , shm->player_count);
-        log_event("SYSTEM" , log_start_msg , NULL);
+    // Accept Loop
+    int connected_count = 0;
+    while (connected_count < shm->player_count) {
+        printf("[System] Waiting for players: %d/%d connected...\n", connected_count, shm->player_count);
+        int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
 
-        // Wait for game to finish
-        pthread_join(tid, NULL);
-        
-        // Game ended - ask if they want to play again
-        printf("\n************************************\n");
-        printf("       GAME OVER!\n");
-        printf("************************************\n");
-        printf("\nPlay again? (y/n): ");
-        
-        char response;
-        scanf(" %c", &response);
-        
-        if (response == 'y' || response == 'Y') {
-            printf("[System] Starting new game...\n");
-            log_event("SYSTEM", "Host requested new game", NULL);
-            
-            // Set flag so children know a new game is coming
-            pthread_mutex_lock(&shm->mutex);
-            shm->new_game_pending = 1;
-            pthread_cond_broadcast(&shm->cond_turn_start);  // Wake any waiting children
-            pthread_cond_broadcast(&shm->cond_game_start);
-            pthread_mutex_unlock(&shm->mutex);
-            
-            // Give children time to exit cleanly
-            sleep(2);
-            
-            // Reset game state for new match
-            reset_for_new_game();
-            play_again = 1;
+        if (new_socket >= 0 ){
+            char log_conn_msg[64];
+            sprintf(log_conn_msg , "Player connected from %s:%d" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+            log_event("SYSTEM" , log_conn_msg , NULL);
+        }
+
+        if (new_socket < 0) continue;
+
+        if (fork() == 0) {
+            // --- CHILD PROCESS CODE ---
+            close(server_fd); // Child doesn't need the listener
+            handle_client_session(new_socket, connected_count);
+            exit(0); // Kill child when session ends, reaping will occur
         } else {
-            printf("[System] Shutting down server...\n");
-            log_event("SYSTEM", "Host declined new game, shutting down", NULL);
-            play_again = 0;
+            // --- PARENT PROCESS CODE ---
+            close(new_socket); // Parent doesn't need the specific client socket
+            connected_count++;
         }
     }
-    // ==================== END OUTER GAME LOOP ====================
+    
+    printf("[System] All players connected. Main process waiting for Scheduler.\n");
+
+    // --------------------------- logging for game start ------------------------------- //
+
+    char log_start_msg[64];
+    sprintf(log_start_msg , "All %d players connected. Game starting." , shm->player_count);
+    log_event("SYSTEM" , log_start_msg , NULL);
+
+    pthread_join(tid, NULL); 
     
     // Cleanup
     pthread_mutex_destroy(&shm->mutex);
@@ -493,9 +449,7 @@ void setup_shared_memory() {
     shm->current_turn_index = -1; // -1 indicates no one is playing yet
     shm->game_running = 1; 
     shm->game_started = 0;  
-    shm->turn_completed = 1;
-    shm->new_game_pending = 0;
-    shm->match_winner_id = -1;
+    shm->turn_completed = 1; 
     shm->log_head = 0;
     shm->log_tail = 0;
 
@@ -508,32 +462,6 @@ void setup_shared_memory() {
         shm->players[i].missed_turns = 0;
         shm->players[i].pid = 0;
     }
-}
-
-// Resets game state for a new match (called between games)
-void reset_for_new_game() {
-    pthread_mutex_lock(&shm->mutex);
-    
-    // Reset player session scores (NOT persistent scoreboard)
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        shm->players[i].score = 0;
-        shm->players[i].is_active = 0;
-        shm->players[i].missed_turns = 0;
-        shm->players[i].pid = 0;
-    }
-    
-    // Reset game state flags
-    shm->current_turn_index = -1;
-    shm->game_running = 1;
-    shm->game_started = 0;
-    shm->turn_completed = 1;
-    shm->new_game_pending = 0;
-    shm->match_winner_id = -1;
-    
-    pick_new_word();
-    
-    pthread_mutex_unlock(&shm->mutex);
-    log_event("SYSTEM", "Game state reset for new match", NULL);
 }
 
 
@@ -653,18 +581,12 @@ void handle_client_session(int socket, int player_id) {
     }
     pthread_mutex_unlock(&shm->mutex);
     
-    // BARRIER: Wait for Game Start Signal from Scheduler
-    pthread_mutex_lock(&shm->mutex);
-    while (!shm->game_started && !shm->new_game_pending) {
+   // BARRIER: Wait for Game Start Signal from Scheduler
+    while (!shm->game_started) {
+        pthread_mutex_lock(&shm->mutex);
         pthread_cond_wait(&shm->cond_game_start, &shm->mutex);
-    }
-    // Check if a new game was requested while waiting
-    if (shm->new_game_pending) {
         pthread_mutex_unlock(&shm->mutex);
-        close(socket);
-        exit(0);  // Exit cleanly so new process can be forked
     }
-    pthread_mutex_unlock(&shm->mutex);
 
     // Tell client "Game is starting"
     int sig = SIGNAL_GAME_START;
@@ -674,19 +596,14 @@ void handle_client_session(int socket, int player_id) {
     while (1) {
         pthread_mutex_lock(&shm->mutex);
         
-        // WAIT: Sleep until it is MY turn (with new_game_pending check for deadlock prevention)
-        while ((shm->current_turn_index != player_id || shm->turn_completed == 1) 
-               && shm->game_running 
-               && !shm->new_game_pending) {
+        // WAIT: Sleep until it is MY turn
+        while ((shm->current_turn_index != player_id || shm->turn_completed == 1) && shm->game_running) {
             pthread_cond_wait(&shm->cond_turn_start, &shm->mutex);
         }
         
-        // Check if game died or new game requested while waiting
-        if (!shm->game_running || shm->new_game_pending) { 
-            pthread_mutex_unlock(&shm->mutex); 
-            break; 
-        }
-        log_event("CHILD", "it is MY turn, sending data to client...", player_log);
+        // Check if game died while waiting
+        if (!shm->game_running) { pthread_mutex_unlock(&shm->mutex); break; }
+        log_event("CHILD" , "it is MY turn , sending data to client..." , player_log);
         pthread_mutex_unlock(&shm->mutex); 
         
 
@@ -820,29 +737,7 @@ void handle_client_session(int socket, int player_id) {
         sprintf(log_game, "Guessed: %s | Result: %s", guess, result);
         log_event("GAMEPLAY" , log_game , player_log);
     }
-    
-    // Game loop exited - send appropriate signals to client
-    pthread_mutex_lock(&shm->mutex);
-    int game_over_sig = SIGNAL_GAME_OVER;
-    send(socket, &game_over_sig, sizeof(int), 0);
-    
-    // Send winner name
-    char winner_name[20] = "No one";
-    for(int i = 0; i < shm->player_count; i++) {
-        if(shm->players[i].score >= 3) {
-            strcpy(winner_name, shm->players[i].name);
-            break;
-        }
-    }
-    send(socket, winner_name, 20, 0);
-    
-    // If new game is pending, notify client to stay connected
-    if (shm->new_game_pending) {
-        int new_game_sig = SIGNAL_NEW_GAME;
-        send(socket, &new_game_sig, sizeof(int), 0);
-        log_event("CHILD", "Sent NEW_GAME signal to client", player_log);
-    }
-    pthread_mutex_unlock(&shm->mutex);
+    client_cleanup(player_id, "Game End");
 
 
     disconnect:
