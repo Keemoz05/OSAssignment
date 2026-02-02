@@ -86,7 +86,7 @@ const char word_database[][6] = {
     "YACHT", "YEARN", "YEAST", "YIELD", "YOUNG",
     "ZEBRA", "ZEROS", "ZONES"
 };
-#define WORD_COUNT 20
+#define WORD_COUNT (sizeof(word_database) / sizeof(word_database[0]))
 
 // Data specific to a single player
 typedef struct {
