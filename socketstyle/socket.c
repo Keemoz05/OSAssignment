@@ -30,12 +30,12 @@
 #include <sys/wait.h> 
 
 // ======================================================================================
-//   SECTION 1: CONSTANTS & SHARED MEMORY DEFINITIONS
+//   SECTION 1: CONSTANT VARIABLES & SHARED MEMORY DEFINITIONS
 // ======================================================================================
 
 #define PORT 8080
-#define MAX_PLAYERS 4
-#define MAX_MISSED_TURNS 3 // 3 Strikes Rule
+#define MAX_PLAYERS 5
+#define MAX_MISSED_TURNS 2 // 3 STRIKES FOR AFK RULE
 #define WORD_LENGTH 5
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
@@ -54,7 +54,7 @@ const char word_database[][6] = {
 
 // Data specific to a single player
 typedef struct {
-    int id;             // Internal ID (0 to 3)
+    int id;             // Internal ID (0 to 4)
     int is_active;      // 1 = Online, 0 = Offline
     char name[20];
     pid_t pid;          // Process tracking
@@ -63,10 +63,10 @@ typedef struct {
 } PlayerData;
 
 typedef struct {
-    char tag[16];
-    char msg[MAX_LOG_MSG];
-    char file[32];
-    int pid;
+    char tag[16];        // Event type (SYSTEM, GAMEPLAY, SCHEDULER, CHILD)
+    char msg[128];       // Log message
+    char file[32];       // Optional player-specific log file
+    int pid;             // Process ID for tracing
 } LogEntry;
 
 // THE SHARED MEMORY OBJECT
@@ -85,7 +85,7 @@ typedef struct {
     int total_recorded_players;
     
       // Game State Flags
-    int current_turn_index; // 0 to 3, indicates who plays now
+    int current_turn_index; // 0 to 4, indicates who plays now
     int game_running;       // 1 = Game On, 0 = Game Over
     int game_started;       // 1 = All players connected, start allowed
     int turn_completed;     // Handshake flag to prevent double-turns
@@ -115,8 +115,7 @@ void log_event(const char* tag , const char* message , const char* player_logfil
 
 
 
-//Safely removes a player. 
- 
+//Safely disconnects a player
 void client_cleanup(int player_id, char* reason){
     pthread_mutex_lock(&shm->mutex);
     
@@ -141,6 +140,7 @@ void client_cleanup(int player_id, char* reason){
 void reaper(int signal) { 
     while(waitpid(-1, NULL, WNOHANG) > 0);
 }
+//WNOHANG collects the status of a dead process if there are any
 
 // --- Logging Thread ---
 void *logger_thread_func(void *arg){
@@ -419,33 +419,43 @@ void evaluate_guess(char guess[], const char target[], char result[]) {
 
 // Sets up mmap and Process-Shared Mutexes
 void setup_shared_memory() {
+    // 1. CREATE THE SHARED MEMORY REGION, Changes made here are visible to all forked processes.
     shm = mmap(NULL, sizeof(GameState), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     
+    // 2. CONFIGURE "PROCESS-SHARED" LOCKS
     // Attributes to allow mutexes to work across FORK
     pthread_mutexattr_t mattr; 
     pthread_condattr_t cattr;
+
+    //// Initialize the attribute variables
     pthread_mutexattr_init(&mattr); 
     pthread_condattr_init(&cattr);
+
+    // Tell the attributes that these locks must work across processes.
+    //  Without THIS, the locks will be ignored by child processes.
     pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
     pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
 
 
-    // Init primitives
-    pthread_mutex_init(&shm->mutex, &mattr);
-    pthread_cond_init(&shm->cond_game_start, &cattr);
-    pthread_cond_init(&shm->cond_turn_start, &cattr);
-    pthread_cond_init(&shm->cond_turn_end, &cattr);
-    pthread_mutex_init(&shm->log_mutex , &mattr);
-    pthread_cond_init(&shm->log_cond , &cattr);
+    // 3. INITIALIZE THE ACTUAL LOCKS
+    pthread_mutex_init(&shm->mutex, &mattr);   //Main game Lock
+    pthread_cond_init(&shm->cond_game_start, &cattr); //Signal: "Game has started"
+    pthread_cond_init(&shm->cond_turn_start, &cattr); //Signal: "Your turn"
+    pthread_cond_init(&shm->cond_turn_end, &cattr); //Signal : Turn Finished
+    pthread_mutex_init(&shm->log_mutex , &mattr); //lock for logs
+    pthread_cond_init(&shm->log_cond , &cattr); //Signal:"New Log Added"
 
-    // Defaults
-    shm->current_turn_index = -1;
-    shm->game_running = 1;
-    shm->game_started = 0; 
+    // 4. Set Default game Values
+    shm->current_turn_index = -1; // -1 indicates no one is playing yet
+    shm->game_running = 1; 
+    shm->game_started = 0;  
     shm->turn_completed = 1; 
     shm->log_head = 0;
     shm->log_tail = 0;
+
     pick_new_word();
+
+    // Loop through all player slots and wipe them clean
     for(int i=0; i<MAX_PLAYERS; i++) { 
         shm->players[i].is_active = 0; 
         shm->players[i].score = 0; 
@@ -608,7 +618,7 @@ void handle_client_session(int socket, int player_id) {
 
         char guess[20] = {0};
         char result[20] = {0};
-        char log_msg[40];
+        char log_msg[128];
         
         
         // Wait for user input
@@ -632,11 +642,13 @@ void handle_client_session(int socket, int player_id) {
             sprintf(log_msg, "Timed Out (Strike %d/%d)", strikes, MAX_MISSED_TURNS);
             log_event("TIMEOUT", log_msg, player_log);
 
+            char kick_message[64];
+            snprintf(kick_message, sizeof(kick_message), "Kicked: %d Missed Turns", MAX_MISSED_TURNS);
             if (strikes >= MAX_MISSED_TURNS) {
                 // 3 Strikes -> OUT
                 pthread_mutex_unlock(&shm->mutex);
                 // Note: client_cleanup handles notifying scheduler/Turn End
-                client_cleanup(player_id, "Kicked: 3 Missed Turns");
+                client_cleanup(player_id, kick_message); 
             } else {
                 // Just Skip this turn
                 char msg[] = "Turn Skipped (Timeout)";
@@ -656,7 +668,7 @@ void handle_client_session(int socket, int player_id) {
       
         evaluate_guess(guess, shm->target_word, result);
         
-       // Win Check
+       // On Round Win
         if (strcmp(result, "GGGGG") == 0) {
         
 
@@ -740,10 +752,7 @@ void handle_client_session(int socket, int player_id) {
 
 
 
-
-
-
-// Utility to help user find their IP
+// Function to help user find their IP
 void print_local_ip() {
     char host[256];
     struct hostent *host_entry;
