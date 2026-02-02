@@ -24,6 +24,8 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
+#define SIGNAL_WAITING    4
+#define SIGNAL_RESTART    5
 #define TURN_TIMEOUT 15 // Seconds allowed per turn (from v2)
 
 int main(int argc, char const *argv[]) {
@@ -103,18 +105,51 @@ int main(int argc, char const *argv[]) {
         if (bytes <= 0) { printf("\nServer disconnected.\n"); break; }//idk how to handle this :(
 
         if (signal_received == SIGNAL_GAME_OVER) {
-
-            char winner[20];
-            recv(sock, winner, 20, 0); // Receive the winner's name from server
-
             printf("\n************************************\n");
-            printf("   MATCH OVER! WE HAVE A WINNER!   \n");
+            printf("   GAME OVER - HOST ENDED SESSION   \n");
             printf("************************************\n");
             
             printf("\nPress ENTER to close this window...");
-            getchar(); // Clear any leftover newline
-            getchar(); // Wait for actual enter key
+            getchar();
             break;
+        }
+        
+        // --- CASE: WAITING FOR HOST INPUT ---
+        if (signal_received == SIGNAL_WAITING) {
+            char winner[20];
+            recv(sock, winner, 20, 0); // Receive winner name
+            
+            printf("\n************************************\n");
+            printf("      GRAND CHAMPION DECLARED!      \n");
+            if (strlen(winner) > 0) {
+                printf("        Winner: %s              \n", winner);
+            }
+            printf("************************************\n");
+            printf("\nWaiting for host decision...\n");
+            printf("(Input blocked while host decides)\n");
+            fflush(stdout);
+            
+            // Wait for the next signal (RESTART or GAME_OVER)
+            int next_signal;
+            int next_bytes = recv(sock, &next_signal, sizeof(int), 0);
+            if (next_bytes <= 0) {
+                printf("\nServer disconnected.\n");
+                break;
+            }
+            
+            if (next_signal == SIGNAL_RESTART) {
+                printf("\n========================================\n");
+                printf("      PLAYING AGAIN! Scores reset.      \n");
+                printf("========================================\n\n");
+                continue; // Continue game loop
+            } else if (next_signal == SIGNAL_GAME_OVER) {
+                printf("\n************************************\n");
+                printf("     HOST DECLINED. GAME ENDING.    \n");
+                printf("************************************\n");
+                printf("\nPress ENTER to close this window...");
+                getchar();
+                break;
+            }
         }
 
         // --- CASE 1: GAME START ---
