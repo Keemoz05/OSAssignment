@@ -103,16 +103,7 @@ int main(int argc, char const *argv[]) {
         
         if (bytes <= 0) { printf("\nServer disconnected.\n"); break; }//idk how to handle this :(
 
-        if (signal_received == SIGNAL_GAME_OVER) {
-            printf("\n************************************\n");
-            printf("   SERVER SHUTTING DOWN. GOODBYE!  \n");
-            printf("************************************\n");
-            
-            printf("\nPress ENTER to close this window...");
-            getchar(); // Clear any leftover newline
-            getchar(); // Wait for actual enter key
-            break;
-        }
+
         
         // --- CASE: WAIT FOR RESTART DECISION ---
         else if (signal_received == SIGNAL_WAIT_RESTART) {
