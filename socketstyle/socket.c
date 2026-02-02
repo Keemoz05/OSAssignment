@@ -842,15 +842,16 @@ void handle_client_session(int socket, int player_id) {
             } else {
                 // Only reset word if match NOT over
                 pick_new_word();
+                shm->turn_completed = 1;
+                pthread_cond_signal(&shm->cond_turn_end);
                 pthread_mutex_unlock(&shm->mutex);
             }
+        } else {
+            // Finish Turn (only if NOT a round win - that case handles its own mutex)
+            shm->turn_completed = 1;
+            pthread_cond_signal(&shm->cond_turn_end);
+            pthread_mutex_unlock(&shm->mutex);
         }
-
-        // Finish Turn
-   
-        shm->turn_completed = 1;
-        pthread_cond_signal(&shm->cond_turn_end);
-        pthread_mutex_unlock(&shm->mutex);
 
         // Send Feedback to Client
         send(socket, result, strlen(result) + 1, 0);
