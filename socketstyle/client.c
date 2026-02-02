@@ -24,6 +24,7 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
+#define SIGNAL_WAIT_RESTART 4
 #define TURN_TIMEOUT 15 // Seconds allowed per turn (from v2)
 
 int main(int argc, char const *argv[]) {
@@ -102,19 +103,21 @@ int main(int argc, char const *argv[]) {
         
         if (bytes <= 0) { printf("\nServer disconnected.\n"); break; }//idk how to handle this :(
 
-        if (signal_received == SIGNAL_GAME_OVER) {
 
+        
+        // --- CASE: WAIT FOR RESTART DECISION ---
+        else if (signal_received == SIGNAL_WAIT_RESTART) {
             char winner[20];
             recv(sock, winner, 20, 0); // Receive the winner's name from server
-
-            printf("\n************************************\n");
-            printf("   MATCH OVER! WE HAVE A WINNER!   \n");
-            printf("************************************\n");
             
-            printf("\nPress ENTER to close this window...");
-            getchar(); // Clear any leftover newline
-            getchar(); // Wait for actual enter key
-            break;
+            printf("\n============================================\n");
+            printf("   GRAND CHAMPION: %s\n", winner);
+            printf("============================================\n");
+            printf("\n>>> Awaiting server input... <<<\n");
+            
+            // Wait for next signal from server (GAME_START for restart, GAME_OVER for shutdown)
+            // No input is allowed here - client just waits
+            continue;
         }
 
         // --- CASE 1: GAME START ---
