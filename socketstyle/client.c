@@ -24,6 +24,8 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
+#define SIGNAL_WAITING_INPUT 4
+#define SIGNAL_PLAY_AGAIN 5
 #define TURN_TIMEOUT 15 // Seconds allowed per turn (from v2)
 
 int main(int argc, char const *argv[]) {
@@ -115,6 +117,44 @@ int main(int argc, char const *argv[]) {
             getchar(); // Clear any leftover newline
             getchar(); // Wait for actual enter key
             break;
+        }
+        
+        // --- CASE: WAITING FOR HOST INPUT ---
+        if (signal_received == SIGNAL_WAITING_INPUT) {
+            char winner[20];
+            recv(sock, winner, 20, 0); // Receive winner name
+            
+            printf("\n************************************\n");
+            printf("      GRAND CHAMPION DECLARED!      \n");
+            if (strlen(winner) > 0) {
+                printf("        Winner: %s              \n", winner);
+            }
+            printf("************************************\n");
+            printf("\nWaiting for host decision...\n");
+            printf("(Input blocked while host decides)\n");
+            fflush(stdout);
+            
+            // Wait for the next signal (PLAY_AGAIN or GAME_OVER)
+            int next_signal;
+            int bytes = recv(sock, &next_signal, sizeof(int), 0);
+            if (bytes <= 0) {
+                printf("\nServer disconnected.\n");
+                break;
+            }
+            
+            if (next_signal == SIGNAL_PLAY_AGAIN) {
+                printf("\n========================================\n");
+                printf("      PLAYING AGAIN! Scores reset.      \n");
+                printf("========================================\n\n");
+                continue; // Continue game loop
+            } else if (next_signal == SIGNAL_GAME_OVER) {
+                printf("\n************************************\n");
+                printf("     HOST DECLINED. GAME ENDING.    \n");
+                printf("************************************\n");
+                printf("\nPress ENTER to close this window...");
+                getchar();
+                break;
+            }
         }
 
         // --- CASE 1: GAME START ---

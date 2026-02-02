@@ -40,6 +40,8 @@
 #define SIGNAL_GAME_START 1
 #define SIGNAL_YOUR_TURN  2
 #define SIGNAL_GAME_OVER  3
+#define SIGNAL_WAITING_INPUT 4
+#define SIGNAL_PLAY_AGAIN 5
 #define MAX_LOG_MSG 128
 #define LOG_QUEUE_SIZE 100
 
@@ -91,6 +93,10 @@ typedef struct {
     int turn_completed;     // Handshake flag to prevent double-turns
     int log_head;           // logging queue head
     int log_tail;           // logging queue tail
+    int waiting_for_host_input; // 1 = Server waiting for Y/N, clients blocked
+    int play_again;         // 1 = Play again, 0 = End game
+    int client_sockets[MAX_PLAYERS]; // Store client sockets for cleanup
+    pthread_cond_t cond_play_again; // Signal for play again decision
     
     // POSIX Synchronization Primitives (Must be process-shared)
     pthread_mutex_t mutex;           // Main lock for reading/writing shared memory
@@ -366,6 +372,7 @@ int main() {
     pthread_cond_destroy(&shm->cond_game_start);
     pthread_cond_destroy(&shm->cond_turn_start);
     pthread_cond_destroy(&shm->cond_turn_end);
+    pthread_cond_destroy(&shm->cond_play_again);
     munmap(shm, sizeof(GameState));
     
     return 0;
@@ -444,6 +451,7 @@ void setup_shared_memory() {
     pthread_cond_init(&shm->cond_turn_end, &cattr); //Signal : Turn Finished
     pthread_mutex_init(&shm->log_mutex , &mattr); //lock for logs
     pthread_cond_init(&shm->log_cond , &cattr); //Signal:"New Log Added"
+    pthread_cond_init(&shm->cond_play_again, &cattr); //Signal: "Play again decision made"
 
     // 4. Set Default game Values
     shm->current_turn_index = -1; // -1 indicates no one is playing yet
@@ -452,6 +460,8 @@ void setup_shared_memory() {
     shm->turn_completed = 1; 
     shm->log_head = 0;
     shm->log_tail = 0;
+    shm->waiting_for_host_input = 0;
+    shm->play_again = 0;
 
     pick_new_word();
 
@@ -532,10 +542,174 @@ void *scheduler_thread_func(void *arg) {
         pthread_mutex_unlock(&shm->mutex);
     }
 
+    // Check if game ended due to Grand Champion (waiting_for_host_input will be set)
+    pthread_mutex_lock(&shm->mutex);
+    if (shm->waiting_for_host_input) {
+        pthread_mutex_unlock(&shm->mutex);
+        
+        // Prompt host for play again
+        printf("\n========================================\n");
+        printf("Play again? (y/n): ");
+        fflush(stdout);
+        
+        char response[10];
+        if (fgets(response, sizeof(response), stdin) != NULL) {
+            response[strcspn(response, "\n")] = 0;
+            
+            pthread_mutex_lock(&shm->mutex);
+            if (response[0] == 'y' || response[0] == 'Y') {
+                // Reset game for play again
+                printf("[System] Resetting game for another round...\n");
+                log_event("SYSTEM", "Play again - resetting game", NULL);
+                
+                // Reset all player scores to 0
+                for (int i = 0; i < MAX_PLAYERS; i++) {
+                    shm->players[i].score = 0;
+                    shm->players[i].missed_turns = 0;
+                }
+                
+                // Pick a new word
+                pick_new_word();
+                
+                // Reset game state flags
+                shm->play_again = 1;
+                shm->game_running = 1;
+                shm->waiting_for_host_input = 0;
+                current_idx = 0;
+                
+                // Wake up all children waiting for play again decision
+                pthread_cond_broadcast(&shm->cond_play_again);
+                pthread_mutex_unlock(&shm->mutex);
+                
+                // Continue game loop
+                goto game_loop;
+            } else {
+                // End the game
+                printf("[System] Ending game. Cleaning up clients...\n");
+                log_event("SYSTEM", "Play again declined - ending game", NULL);
+                
+                shm->play_again = 0;
+                shm->waiting_for_host_input = 0;
+                
+                // Wake up all children to exit
+                pthread_cond_broadcast(&shm->cond_play_again);
+                pthread_mutex_unlock(&shm->mutex);
+            }
+        } else {
+            pthread_mutex_lock(&shm->mutex);
+            shm->play_again = 0;
+            shm->waiting_for_host_input = 0;
+            pthread_cond_broadcast(&shm->cond_play_again);
+            pthread_mutex_unlock(&shm->mutex);
+        }
+    } else {
+        pthread_mutex_unlock(&shm->mutex);
+    }
+
     //A broadcast to signal everyone game is ending
     pthread_mutex_lock(&shm->mutex);
     int final_sig = SIGNAL_GAME_OVER;
     // Notify any waiting children (they might be stuck in a cond_wait) like waking em up
+    pthread_cond_broadcast(&shm->cond_turn_start); 
+    pthread_mutex_unlock(&shm->mutex);
+
+    log_event("SCHEDULER", "Game finished.", NULL);
+    return NULL;
+    
+game_loop:
+    // Restarted game loop after play again
+    while (shm->game_running) {
+        pthread_mutex_lock(&shm->mutex);
+        
+        //skipping inactive player
+        int checked = 0;
+        while (shm->players[current_idx].is_active == 0) {
+            printf("[Scheduler] Skipping inactive Player %d\n", current_idx + 1);
+            current_idx = (current_idx + 1) % shm->player_count;
+            checked++;
+            
+            if (checked > shm->player_count) {
+                printf("[Scheduler] All players gone. Game Over.\n");
+                shm->game_running = 0;
+                pthread_mutex_unlock(&shm->mutex);
+                log_event("SCHEDULER", "Game finished.", NULL);
+                return NULL;
+            }
+        }
+
+        // Announce Turn 
+        shm->current_turn_index = current_idx;
+        shm->turn_completed = 0; 
+        
+        printf("[Scheduler] Turn: Player %d | Word: %s\n", current_idx + 1, shm->target_word);
+        log_event("SCHEDULER" , "Broadcast turn start" , NULL);
+
+        pthread_cond_broadcast(&shm->cond_turn_start);
+
+        // Wait for Turn End
+        while (shm->turn_completed == 0 && shm->players[current_idx].is_active) {
+            pthread_cond_wait(&shm->cond_turn_end, &shm->mutex);
+        }
+
+        log_event("SCHEDULER" , "Turn completed, advancing..." , NULL);
+        current_idx = (current_idx + 1) % shm->player_count;
+        pthread_mutex_unlock(&shm->mutex);
+    }
+
+    // Check again if we need to prompt for play again
+    pthread_mutex_lock(&shm->mutex);
+    if (shm->waiting_for_host_input) {
+        pthread_mutex_unlock(&shm->mutex);
+        
+        printf("\n========================================\n");
+        printf("Play again? (y/n): ");
+        fflush(stdout);
+        
+        char response[10];
+        if (fgets(response, sizeof(response), stdin) != NULL) {
+            response[strcspn(response, "\n")] = 0;
+            
+            pthread_mutex_lock(&shm->mutex);
+            if (response[0] == 'y' || response[0] == 'Y') {
+                printf("[System] Resetting game for another round...\n");
+                log_event("SYSTEM", "Play again - resetting game", NULL);
+                
+                for (int i = 0; i < MAX_PLAYERS; i++) {
+                    shm->players[i].score = 0;
+                    shm->players[i].missed_turns = 0;
+                }
+                
+                pick_new_word();
+                shm->play_again = 1;
+                shm->game_running = 1;
+                shm->waiting_for_host_input = 0;
+                current_idx = 0;
+                
+                pthread_cond_broadcast(&shm->cond_play_again);
+                pthread_mutex_unlock(&shm->mutex);
+                
+                goto game_loop;
+            } else {
+                printf("[System] Ending game. Cleaning up clients...\n");
+                log_event("SYSTEM", "Play again declined - ending game", NULL);
+                
+                shm->play_again = 0;
+                shm->waiting_for_host_input = 0;
+                pthread_cond_broadcast(&shm->cond_play_again);
+                pthread_mutex_unlock(&shm->mutex);
+            }
+        } else {
+            pthread_mutex_lock(&shm->mutex);
+            shm->play_again = 0;
+            shm->waiting_for_host_input = 0;
+            pthread_cond_broadcast(&shm->cond_play_again);
+            pthread_mutex_unlock(&shm->mutex);
+        }
+    } else {
+        pthread_mutex_unlock(&shm->mutex);
+    }
+
+    pthread_mutex_lock(&shm->mutex);
     pthread_cond_broadcast(&shm->cond_turn_start); 
     pthread_mutex_unlock(&shm->mutex);
 
@@ -601,8 +775,39 @@ void handle_client_session(int socket, int player_id) {
             pthread_cond_wait(&shm->cond_turn_start, &shm->mutex);
         }
         
-        // Check if game died while waiting
-        if (!shm->game_running) { pthread_mutex_unlock(&shm->mutex); break; }
+        // Check if game ended while waiting (Grand Champion declared by another player)
+        if (!shm->game_running) { 
+            // Check if we need to wait for host's play again decision
+            if (shm->waiting_for_host_input) {
+                // Send waiting signal to THIS client
+                int waiting_sig = SIGNAL_WAITING_INPUT;
+                pthread_mutex_unlock(&shm->mutex);
+                send(socket, &waiting_sig, sizeof(int), 0);
+                send(socket, "", 1, 0); // Empty winner name (this client didn't win)
+                
+                // Wait for host's play again decision
+                pthread_mutex_lock(&shm->mutex);
+                while (shm->waiting_for_host_input) {
+                    pthread_cond_wait(&shm->cond_play_again, &shm->mutex);
+                }
+                
+                if (shm->play_again) {
+                    // Send play again signal to client
+                    int play_sig = SIGNAL_PLAY_AGAIN;
+                    pthread_mutex_unlock(&shm->mutex);
+                    send(socket, &play_sig, sizeof(int), 0);
+                    continue; // Restart game loop with reset scores
+                } else {
+                    // Game ending - cleanup this client
+                    pthread_mutex_unlock(&shm->mutex);
+                    int end_sig = SIGNAL_GAME_OVER;
+                    send(socket, &end_sig, sizeof(int), 0);
+                    client_cleanup(player_id, "Game End - No Rematch");
+                }
+            }
+            pthread_mutex_unlock(&shm->mutex); 
+            break; 
+        }
         log_event("CHILD" , "it is MY turn , sending data to client..." , player_log);
         pthread_mutex_unlock(&shm->mutex); 
         
@@ -699,22 +904,45 @@ void handle_client_session(int socket, int player_id) {
 
             // --- MATCH WIN CONDITION ---
             if (shm->players[player_id].score >= 3) {
-            int sig = SIGNAL_GAME_OVER;
-            send(socket, &sig, sizeof(int), 0);
-            send(socket, name, strlen(name) + 1, 0);
-}
-
-            if (shm->players[player_id].score >= 3) {
                 printf("!!! MATCH OVER: %s is the Grand Champion !!!\n", name);
                 sprintf(log_msg, "MATCH OVER: %s is the Grand Champion", name);
                 log_event("GAMEPLAY", log_msg, player_log);
 
+                // Send waiting signal to THIS client (the winner)
+                int waiting_sig = SIGNAL_WAITING_INPUT;
+                send(socket, &waiting_sig, sizeof(int), 0);
+                send(socket, name, strlen(name) + 1, 0); // Send winner name
+                
+                // Set flags for play again prompt
+                shm->waiting_for_host_input = 1;
                 shm->game_running = 0;
 
-                // Wake everyone so they can exit cleanly
+                // Wake everyone so they can send waiting signal to their clients
                 shm->turn_completed = 1;
                 pthread_cond_broadcast(&shm->cond_turn_start);
                 pthread_cond_broadcast(&shm->cond_turn_end);
+                
+                pthread_mutex_unlock(&shm->mutex);
+                
+                // Wait for host's play again decision
+                pthread_mutex_lock(&shm->mutex);
+                while (shm->waiting_for_host_input) {
+                    pthread_cond_wait(&shm->cond_play_again, &shm->mutex);
+                }
+                
+                if (shm->play_again) {
+                    // Send play again signal to client
+                    int play_sig = SIGNAL_PLAY_AGAIN;
+                    pthread_mutex_unlock(&shm->mutex);
+                    send(socket, &play_sig, sizeof(int), 0);
+                    continue; // Restart game loop with reset scores
+                } else {
+                    // Game ending - cleanup this client
+                    pthread_mutex_unlock(&shm->mutex);
+                    int end_sig = SIGNAL_GAME_OVER;
+                    send(socket, &end_sig, sizeof(int), 0);
+                    client_cleanup(player_id, "Game End - No Rematch");
+                }
             } else {
                 // Only reset word if match NOT over
                 pick_new_word();
