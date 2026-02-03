@@ -1,7 +1,7 @@
-
-**                    MULTIPLAYER WORD GUESS GAME
-                  Socket-Based Client-Server Game**
-
+================================================================================
+                    MULTIPLAYER WORD GUESS GAME
+                  Socket-Based Client-Server Game
+================================================================================
 
 TABLE OF CONTENTS
 -----------------
@@ -31,8 +31,9 @@ CLEANUP:
     make kill       # Terminate all running game processes
     make clean-logs # Remove all log files (game.log, log_*.txt, scores.txt)
 
+================================================================================
 2. EXAMPLE COMMANDS
-
+================================================================================
 
 STARTING A LOCAL GAME (2 PLAYERS):
 ----------------------------------
@@ -57,8 +58,9 @@ STARTING A NETWORK GAME:
     Enter Server IP (Press ENTER for Localhost): 192.168.1.100
     Enter your name: Player1
 
-
+================================================================================
 3. GAME RULES SUMMARY
+================================================================================
 
 OBJECTIVE:
 ----------
@@ -104,9 +106,9 @@ INPUT REQUIREMENTS:
 - Letters only (A-Z, case insensitive)
 - No numbers or special characters
 
-
+================================================================================
 4. MODES SUPPORTED
-
+================================================================================
 
 MODE 1: LOCAL MODE
 ------------------
@@ -147,9 +149,9 @@ ADDITIONAL FEATURES
 - Graceful Shutdown: Ctrl+C saves scores before exiting
 - Disconnect Handling: Players can disconnect without crashing the server
 
-
+================================================================================
                            ARCHITECTURE NOTES
-
+================================================================================
 
 Server Components:
 - Main Process: Accepts connections and forks child processes
@@ -165,9 +167,9 @@ Communication:
 - TCP Sockets on Port 8080
 - Signal-based game events (GAME_START, YOUR_TURN, GAME_OVER)
 
-
+================================================================================
                                WORD BANK
-
+================================================================================
 
 The game includes a database of 20+ five-letter words including:
 APPLE, BEACH, BRAIN, BREAD, BRUSH, CHAIR, CHESS, CHORD, CLICK, CLOCK,
